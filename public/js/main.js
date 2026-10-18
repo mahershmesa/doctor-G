@@ -45,7 +45,7 @@ function renderBasics(s) {
   $('#brand').innerHTML = brandHtml(s);
   $('#footerBrand').innerHTML = brandHtml(s);
   $('#heroBook').innerHTML = `${icon('calendar')} احجز موعدك الآن`;
-  $('#heroChat').innerHTML = `${icon('chat')} تحدث مع الطبيب`;
+  $('#heroChat').innerHTML = `${icon('chat')} تحدث مع الطبيبة`;
   $('#heroChat').hidden = !s.chatEnabled;
   $('#fcIcon1').innerHTML = icon('tooth');
   $('#fcIcon2').innerHTML = icon('star');

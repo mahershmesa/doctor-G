@@ -507,7 +507,7 @@ function upsertChat(summary) {
 // ---------- settings ----------
 const SETTINGS_GROUPS = [
   { title: 'الهوية والألوان', fields: [
-    ['clinicName', 'اسم العيادة'], ['doctorName', 'اسم الطبيب'], ['doctorTitle', 'التخصص / اللقب'], ['logoText', 'نص الشعار'],
+    ['clinicName', 'اسم العيادة'], ['doctorName', 'اسم الطبيبة'], ['doctorTitle', 'التخصص / اللقب'], ['logoText', 'نص الشعار'],
     ['logoImage', 'صورة الشعار (اختياري)', 'image'], ['primaryColor', 'اللون الأساسي للموقع', 'color'],
     ['seoDescription', 'وصف الموقع لمحركات البحث', 'textarea', 'full'],
   ] },
@@ -517,8 +517,8 @@ const SETTINGS_GROUPS = [
     ['heroImage', 'صورة الواجهة (تظهر عند إيقاف المجسم)', 'image'],
     ['stats', 'الإحصائيات', 'textarea', '', 'كل سطر: الرقم | الوصف — مثال: +10 | سنوات خبرة'],
   ] },
-  { title: 'عن الطبيب', fields: [
-    ['aboutTitle', 'عنوان القسم'], ['doctorPhoto', 'صورة الطبيب', 'image'],
+  { title: 'عن الطبيبة', fields: [
+    ['aboutTitle', 'عنوان القسم'], ['doctorPhoto', 'صورة الطبيبة', 'image'],
     ['aboutText', 'النبذة', 'textarea', 'full', 'افصل بين الفقرات بسطر فارغ'],
     ['aboutHighlights', 'المؤهلات والنقاط المميزة', 'textarea', 'full', 'كل نقطة في سطر'],
   ] },
@@ -541,7 +541,7 @@ const SETTINGS_GROUPS = [
     ['mapEmbed', 'خريطة Google', 'textarea', '', 'من خرائط Google: مشاركة ← تضمين خريطة ← انسخ HTML والصقه هنا'],
   ] },
   { title: 'الدردشة المدفوعة', fields: [
-    ['chatEnabled', 'تفعيل الدردشة المباشرة مع الطبيب', 'bool', 'full'], ['chatPrice', 'رسوم الاستشارة'],
+    ['chatEnabled', 'تفعيل الدردشة المباشرة مع الطبيبة', 'bool', 'full'], ['chatPrice', 'رسوم الاستشارة'],
     ['chatIntro', 'نص تعريفي للدردشة', 'textarea', 'full'],
   ] },
   { title: 'التواصل الاجتماعي', fields: [
@@ -778,7 +778,7 @@ function viewUsers() {
     <div class="grid-2">
       <div class="panel">
         <div class="panel-head"><h2>حسابات لوحة التحكم</h2></div>
-        ${users.map((u) => `<div class="user-row"><span class="av">${esc(u.name.charAt(0))}</span><div><b>${esc(u.name)}</b><div class="muted small ltr">${esc(u.username)}</div></div><span class="status ${u.role === 'admin' ? 'st-approved' : 'st-done'}">${u.role === 'admin' ? 'الطبيب (كامل الصلاحيات)' : 'مساعد'}</span>${u.id !== state.user.id ? `<button class="icon-btn danger" data-udel="${u.id}">${icon('trash')}</button>` : ''}</div>`).join('')}
+        ${users.map((u) => `<div class="user-row"><span class="av">${esc(u.name.charAt(0))}</span><div><b>${esc(u.name)}</b><div class="muted small ltr">${esc(u.username)}</div></div><span class="status ${u.role === 'admin' ? 'st-approved' : 'st-done'}">${u.role === 'admin' ? 'الطبيبة (كامل الصلاحيات)' : 'مساعد'}</span>${u.id !== state.user.id ? `<button class="icon-btn danger" data-udel="${u.id}">${icon('trash')}</button>` : ''}</div>`).join('')}
       </div>
       <form class="panel" id="userForm">
         <div class="panel-head"><h2>إضافة مستخدم</h2></div>
@@ -922,7 +922,7 @@ async function start() {
   $('#menuBtn').innerHTML = icon('menu');
   $('#viewSite').innerHTML = `${icon('eye')}<span>عرض الموقع</span>`;
   $('#logoutBtn').innerHTML = `${icon('logout')}<span>تسجيل الخروج</span>`;
-  $('#userChip').innerHTML = `<span class="av">${esc(state.user.name.charAt(0))}</span><div><b>${esc(state.user.name)}</b><small>${state.user.role === 'admin' ? 'الطبيب' : 'مساعد'}</small></div>`;
+  $('#userChip').innerHTML = `<span class="av">${esc(state.user.name.charAt(0))}</span><div><b>${esc(state.user.name)}</b><small>${state.user.role === 'admin' ? 'الطبيبة' : 'مساعد'}</small></div>`;
   const nb = $('#notifyBtn');
   nb.innerHTML = icon('bell');
   nb.hidden = !('Notification' in window) || Notification.permission !== 'default';

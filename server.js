@@ -1,4 +1,4 @@
-// Doctor G — dental clinic website server.
+// Dr. Noor Ali — dental clinic website server.
 // Serves the public site, the admin dashboard, a JSON API and live chat (Socket.io).
 
 const express = require('express');
@@ -37,7 +37,7 @@ if (!db.data.users.length) {
   db.data.users.push({
     id: crypto.randomUUID(),
     username: process.env.ADMIN_USERNAME || 'admin',
-    name: db.data.settings.doctorName || 'الطبيب',
+    name: db.data.settings.doctorName || 'الطبيبة',
     role: 'admin',
     salt,
     hash,
@@ -340,7 +340,7 @@ function requireStaff(req, res, next) {
   next();
 }
 function requireAdmin(req, res, next) {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'هذه الصلاحية للطبيب فقط' });
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'هذه الصلاحية للطبيبة فقط' });
   next();
 }
 
@@ -632,7 +632,7 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 if (require.main === module) {
-  server.listen(PORT, () => console.log(`Doctor G site running on http://localhost:${PORT}  (admin: /admin)`));
+  server.listen(PORT, () => console.log(`Dr. Noor Ali site running on http://localhost:${PORT}  (admin: /admin)`));
 }
 
 module.exports = { app, server, db };

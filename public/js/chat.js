@@ -98,14 +98,14 @@ function connect() {
     chat.staffNote = staffNote;
     if (panel().classList.contains('open')) renderState();
     if (was !== 'approved' && status === 'approved') {
-      ctx.toast('تم تأكيد الدفع وفتح المحادثة مع الطبيب ✓');
+      ctx.toast('تم تأكيد الدفع وفتح المحادثة مع الطبيبة ✓');
       notifyDot();
     }
   });
   socket.on('chat:typing', () => {
     const el = $('#typing');
     if (!el) return;
-    el.textContent = 'الطبيب يكتب…';
+    el.textContent = 'الطبيبة تكتب…';
     clearTimeout(typingTimer);
     typingTimer = setTimeout(() => (el.textContent = ''), 2500);
   });
@@ -135,7 +135,7 @@ function renderGate() {
     <form class="chat-gate" id="gateForm" novalidate>
       <div class="gate-hero">
         <div class="gate-lock">${icon('lock')}</div>
-        <h3>الدردشة المباشرة مع الطبيب</h3>
+        <h3>الدردشة المباشرة مع الطبيبة</h3>
         <p>${esc(s.chatIntro || '')}</p>
         ${s.chatPrice ? `<span class="gate-price">رسوم الاستشارة: ${esc(s.chatPrice)}</span>` : ''}
       </div>
@@ -213,7 +213,7 @@ function renderState() {
       <div class="status-box">
         <div class="ring-loader"></div>
         <h3>طلبك قيد المراجعة</h3>
-        <p>سيقوم الطبيب أو المساعد بتأكيد الدفع وفتح المحادثة لك. ستُفتح هنا تلقائيًا فور الموافقة.</p>
+        <p>ستقوم الطبيبة أو المساعد بتأكيد الدفع وفتح المحادثة لك. ستُفتح هنا تلقائيًا فور الموافقة.</p>
         ${wa}
         <p style="margin-top:1rem"><button class="btn btn-soft" type="button" id="cancelReq">إلغاء الطلب</button></p>
       </div>`;
@@ -237,7 +237,7 @@ function renderState() {
   setStatusText(closed ? 'انتهت المحادثة' : 'متصل — المحادثة مفتوحة', !closed);
   body().innerHTML = `
     <div class="chat-scroll" id="chatScroll">
-      <div class="msg system"><div class="bubble">${icon('unlock')} تم فتح المحادثة. مرحبًا ${esc(chat.name)}، اكتب سؤالك للطبيب.</div></div>
+      <div class="msg system"><div class="bubble">${icon('unlock')} تم فتح المحادثة. مرحبًا ${esc(chat.name)}، اكتب سؤالك للطبيبة.</div></div>
     </div>
     <div class="typing" id="typing"></div>
     ${closed
