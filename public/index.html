@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>عيادة طب الأسنان</title>
+  <meta name="description" content="عيادة طب وتجميل الأسنان" />
+  <meta name="theme-color" content="#0f9b8e" />
+  <link rel="icon" href="/img/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Readex+Pro:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <div class="loader" id="loader" aria-hidden="true"><div class="loader-tooth"></div></div>
+
+  <header class="site-header" id="header">
+    <div class="container header-inner">
+      <a class="brand" href="#home" id="brand"></a>
+      <nav class="nav" id="nav" aria-label="القائمة الرئيسية">
+        <a href="#home">الرئيسية</a>
+        <a href="#about">عن الطبيب</a>
+        <a href="#services">الخدمات</a>
+        <a href="#portfolio">أعمالنا</a>
+        <a href="#testimonials">آراء المرضى</a>
+        <a href="#contact">تواصل</a>
+        <a href="#booking" class="btn btn-primary nav-cta">احجز موعد</a>
+      </nav>
+      <button class="menu-toggle" id="menuToggle" aria-label="فتح القائمة" aria-expanded="false"></button>
+    </div>
+  </header>
+
+  <main>
+    <!-- HERO -->
+    <section class="hero" id="home">
+      <div class="hero-bg" aria-hidden="true"><span class="blob b1"></span><span class="blob b2"></span><span class="grid-dots"></span></div>
+      <div class="container hero-grid">
+        <div class="hero-text">
+          <span class="pill reveal" data-bind="heroBadge"></span>
+          <h1 class="reveal" data-bind="heroTitle"></h1>
+          <p class="lead reveal" data-bind="heroSubtitle"></p>
+          <div class="hero-actions reveal">
+            <a href="#booking" class="btn btn-primary btn-lg" id="heroBook"></a>
+            <button class="btn btn-ghost btn-lg" id="heroChat" type="button"></button>
+          </div>
+          <div class="stats reveal" id="stats"></div>
+        </div>
+        <div class="hero-visual reveal">
+          <div class="visual-halo" aria-hidden="true"></div>
+          <canvas id="tooth3d" aria-label="مجسم ثلاثي الأبعاد لسن" role="img"></canvas>
+          <img id="heroImage" alt="" hidden />
+          <div class="float-card fc-1"><span class="fc-icon" id="fcIcon1"></span><div><strong data-bind="doctorName"></strong><small data-bind="doctorTitle"></small></div></div>
+          <div class="float-card fc-2"><span class="fc-icon star" id="fcIcon2"></span><div><strong>5.0</strong><small>تقييم المرضى</small></div></div>
+          <span class="drag-hint" id="dragHint">اسحب لتدوير المجسم</span>
+        </div>
+      </div>
+      <a href="#about" class="scroll-cue" aria-label="انتقل للأسفل"><span></span></a>
+    </section>
+
+    <!-- ABOUT -->
+    <section class="section" id="about">
+      <div class="container about-grid">
+        <div class="about-media reveal">
+          <div class="photo-frame" id="doctorPhoto"></div>
+          <div class="exp-badge" id="expBadge"></div>
+        </div>
+        <div class="about-text reveal">
+          <span class="eyebrow">تعرّف علينا</span>
+          <h2 data-bind="aboutTitle"></h2>
+          <div class="rich" id="aboutText"></div>
+          <ul class="checklist" id="aboutHighlights"></ul>
+          <div class="about-actions">
+            <a href="#booking" class="btn btn-primary">احجز استشارتك</a>
+            <a href="#portfolio" class="btn btn-soft">شاهد أعمالنا</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SERVICES -->
+    <section class="section alt" id="services">
+      <div class="container">
+        <div class="section-head reveal">
+          <span class="eyebrow">ماذا نقدّم</span>
+          <h2 data-bind="servicesTitle"></h2>
+          <p data-bind="servicesSubtitle"></p>
+        </div>
+        <div class="services-grid" id="servicesGrid"></div>
+      </div>
+    </section>
+
+    <!-- PORTFOLIO -->
+    <section class="section" id="portfolio">
+      <div class="container">
+        <div class="section-head reveal">
+          <span class="eyebrow">بورتفوليو</span>
+          <h2 data-bind="portfolioTitle"></h2>
+          <p data-bind="portfolioSubtitle"></p>
+        </div>
+        <div class="filters reveal" id="portfolioFilters" role="tablist"></div>
+        <div class="portfolio-grid" id="portfolioGrid"></div>
+      </div>
+    </section>
+
+    <!-- TESTIMONIALS -->
+    <section class="section alt" id="testimonials">
+      <div class="container">
+        <div class="section-head reveal">
+          <span class="eyebrow">قصص نجاح</span>
+          <h2 data-bind="testimonialsTitle"></h2>
+          <p data-bind="testimonialsSubtitle"></p>
+        </div>
+        <div class="testimonials" id="testimonialsList"></div>
+      </div>
+    </section>
+
+    <!-- BOOKING -->
+    <section class="section booking-section" id="booking">
+      <div class="container booking-grid">
+        <div class="booking-info reveal">
+          <span class="eyebrow light">موعدك بخطوة</span>
+          <h2 data-bind="bookingTitle"></h2>
+          <p data-bind="bookingSubtitle"></p>
+          <div class="info-block">
+            <h3><span id="hoursIcon"></span> أوقات العمل</h3>
+            <ul class="hours" id="workingHours"></ul>
+          </div>
+          <div class="info-block">
+            <h3><span id="payIcon"></span> طرق الدفع المتاحة</h3>
+            <div class="pay-list" id="payList"></div>
+          </div>
+        </div>
+        <form class="booking-form card reveal" id="bookingForm" novalidate>
+          <div class="form-row">
+            <label class="field"><span>الاسم الكامل *</span><input name="name" required maxlength="100" autocomplete="name" /></label>
+            <label class="field"><span>رقم الهاتف / واتساب *</span><input name="phone" required inputmode="tel" dir="ltr" maxlength="30" autocomplete="tel" placeholder="07xx xxx xxxx" /></label>
+          </div>
+          <label class="field"><span>الخدمة</span><select name="service" id="serviceSelect"></select></label>
+          <div class="form-row">
+            <label class="field"><span>التاريخ *</span><input type="date" name="date" id="dateInput" required /></label>
+            <div class="field"><span>طريقة الدفع</span><select name="paymentMethod" id="bookingPay"></select></div>
+          </div>
+          <div class="field">
+            <span>الوقت *</span>
+            <div class="slots" id="slots"><p class="muted small">اختر التاريخ أولًا</p></div>
+          </div>
+          <label class="field"><span>ملاحظات</span><textarea name="notes" rows="3" maxlength="1000" placeholder="اكتب أي تفاصيل تود مشاركتها مع الطبيب"></textarea></label>
+          <p class="muted small" data-bind="bookingNote"></p>
+          <button class="btn btn-whatsapp btn-lg btn-block" type="submit" id="bookingSubmit"></button>
+          <p class="form-error" id="bookingError" role="alert"></p>
+        </form>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="section" id="faq">
+      <div class="container narrow">
+        <div class="section-head reveal">
+          <span class="eyebrow">لديك سؤال؟</span>
+          <h2 data-bind="faqTitle"></h2>
+        </div>
+        <div class="faq" id="faqList"></div>
+      </div>
+    </section>
+
+    <!-- CONTACT -->
+    <section class="section alt" id="contact">
+      <div class="container">
+        <div class="section-head reveal">
+          <span class="eyebrow">نحن هنا لأجلك</span>
+          <h2 data-bind="contactTitle"></h2>
+        </div>
+        <div class="contact-grid">
+          <div class="contact-cards reveal" id="contactCards"></div>
+          <div class="map card reveal" id="mapBox"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="brand footer-brand" id="footerBrand"></div>
+      <div class="socials" id="socials"></div>
+      <p class="muted small" id="copyright"></p>
+    </div>
+  </footer>
+
+  <!-- floating buttons -->
+  <div class="fabs">
+    <a class="fab fab-wa" id="fabWhatsapp" target="_blank" rel="noopener" aria-label="واتساب"></a>
+    <button class="fab fab-chat" id="fabChat" type="button" aria-label="الدردشة مع الطبيب"><span class="fab-dot" hidden></span></button>
+  </div>
+
+  <!-- chat panel -->
+  <aside class="chat-panel" id="chatPanel" aria-hidden="true" aria-label="الدردشة مع الطبيب">
+    <div class="chat-head">
+      <div class="chat-avatar" id="chatAvatar"></div>
+      <div class="chat-title"><strong data-bind="doctorName"></strong><small id="chatStatusText"></small></div>
+      <button class="icon-btn" id="chatClose" aria-label="إغلاق"></button>
+    </div>
+    <div class="chat-body" id="chatBody"></div>
+  </aside>
+
+  <!-- lightbox -->
+  <div class="lightbox" id="lightbox" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="lightbox-inner" id="lightboxInner"></div>
+  </div>
+
+  <!-- booking success -->
+  <div class="modal" id="bookingModal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-card" id="bookingModalCard"></div>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="/socket.io/socket.io.js" defer></script>
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

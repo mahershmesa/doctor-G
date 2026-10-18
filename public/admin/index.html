@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="robots" content="noindex" />
+  <title>لوحة التحكم</title>
+  <link rel="icon" href="/img/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/admin/admin.css" />
+</head>
+<body>
+  <!-- login -->
+  <section class="login" id="login" hidden>
+    <form class="login-card" id="loginForm">
+      <div class="login-logo"><img src="/img/favicon.svg" alt="" width="56" height="56" /></div>
+      <h1>لوحة تحكم العيادة</h1>
+      <p class="muted">سجّل الدخول لإدارة الموقع والحجوزات والمحادثات</p>
+      <label class="field"><span>اسم المستخدم</span><input name="username" autocomplete="username" dir="ltr" required /></label>
+      <label class="field"><span>كلمة المرور</span><input name="password" type="password" autocomplete="current-password" dir="ltr" required /></label>
+      <button class="btn btn-primary btn-block" type="submit">دخول</button>
+      <p class="form-error" id="loginError"></p>
+      <a class="muted small" href="/">← العودة إلى الموقع</a>
+    </form>
+  </section>
+
+  <!-- app -->
+  <div class="app" id="app" hidden>
+    <aside class="sidebar" id="sidebar">
+      <div class="side-brand"><img src="/img/favicon.svg" alt="" width="36" height="36" /><div><strong id="sideClinic">العيادة</strong><small>لوحة التحكم</small></div></div>
+      <nav class="side-nav" id="sideNav"></nav>
+      <div class="side-foot">
+        <a class="side-link" href="/" target="_blank" rel="noopener" id="viewSite"></a>
+        <button class="side-link" id="logoutBtn" type="button"></button>
+      </div>
+    </aside>
+    <div class="side-overlay" id="sideOverlay"></div>
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="القائمة"></button>
+        <h1 id="viewTitle"></h1>
+        <div class="top-actions">
+          <button class="icon-btn" id="notifyBtn" title="تفعيل الإشعارات" type="button"></button>
+          <div class="user-chip" id="userChip"></div>
+        </div>
+      </header>
+      <div class="content" id="view"></div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal" aria-hidden="true"><div class="modal-card" id="modalCard"></div></div>
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/admin/admin.js"></script>
+</body>
+</html>

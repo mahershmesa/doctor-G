@@ -1,0 +1,32 @@
+{
+  "name": "doctor-g",
+  "version": "1.0.0",
+  "description": "موقع عيادة طبيب أسنان - بورتفوليو، حجز مواعيد عبر واتساب، دردشة مباشرة مدفوعة ولوحة تحكم",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test --test-force-exit test/*.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mahershmesa/doctor-G.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/mahershmesa/doctor-G/issues"
+  },
+  "homepage": "https://github.com/mahershmesa/doctor-G#readme",
+  "dependencies": {
+    "express": "^4.22.3",
+    "multer": "^2.4.0",
+    "socket.io": "^4.8.4",
+    "three": "^0.169.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "private": true
+}
