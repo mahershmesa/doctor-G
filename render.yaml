@@ -1,0 +1,14 @@
+# One-click deploy on Render: https://render.com/deploy?repo=https://github.com/mahershmesa/doctor-G
+services:
+  - type: web
+    name: doctor-g
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/content
+    envVars:
+      - key: ADMIN_PASSWORD
+        sync: false # Render asks for the dashboard password during setup
+      - key: SESSION_SECRET
+        generateValue: true

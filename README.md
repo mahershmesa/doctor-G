@@ -48,6 +48,14 @@ npm start
 
 ## النشر على الإنترنت
 
+### أسرع طريقة: Render بضغطة واحدة
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/mahershmesa/doctor-G)
+
+سجّل الدخول بحساب GitHub، اكتب كلمة مرور لوحة التحكم في خانة `ADMIN_PASSWORD`، ثم اضغط **Apply**. الخطة المجانية مناسبة للتجربة فقط: الموقع ينام بعد 15 دقيقة بدون زيارات، والبيانات والصور تُمسح عند إعادة التشغيل.
+
+### خيارات أخرى
+
 الموقع يحتاج خادم Node.js (وليس استضافة صفحات ثابتة فقط) لأن فيه حجوزات ودردشة مباشرة ورفع ملفات.
 
 - **VPS** (مثل Hetzner أو DigitalOcean): `npm install && npm start` خلف Nginx مع HTTPS، ويُفضّل تشغيله عبر `pm2`.
