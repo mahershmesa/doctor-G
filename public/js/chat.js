@@ -21,7 +21,7 @@ let lastRequest = null; // whatsapp + message to notify clinic
 
 const panel = () => $('#chatPanel');
 const body = () => $('#chatBody');
-const fileUrl = (u) => (u && u.startsWith('/api/files/') ? `${u}?t=${encodeURIComponent(token)}` : u);
+const fileUrl = (u) => u; // links arrive signed from the server
 const timeFmt = (iso) => new Date(iso).toLocaleTimeString('ar-u-nu-latn', { hour: 'numeric', minute: '2-digit' });
 
 export function initChat(c) {

@@ -24,6 +24,16 @@
       <p class="form-error" id="loginError"></p>
       <a class="muted small" href="/">← العودة إلى الموقع</a>
     </form>
+    <form class="login-card" id="forceForm" hidden>
+      <div class="login-logo"><img src="/img/favicon.svg" alt="" width="56" height="56" /></div>
+      <h1>غيّر كلمة المرور أولًا</h1>
+      <p class="muted">لحماية بيانات المرضى، يجب استبدال كلمة المرور الافتراضية قبل استخدام لوحة التحكم.</p>
+      <label class="field"><span>كلمة المرور الحالية</span><input name="current" type="password" autocomplete="current-password" dir="ltr" required /></label>
+      <label class="field"><span>كلمة المرور الجديدة (8 أحرف على الأقل)</span><input name="next" type="password" autocomplete="new-password" dir="ltr" minlength="8" required /></label>
+      <label class="field"><span>تأكيد كلمة المرور الجديدة</span><input name="confirm" type="password" autocomplete="new-password" dir="ltr" minlength="8" required /></label>
+      <button class="btn btn-primary btn-block" type="submit">حفظ والمتابعة</button>
+      <p class="form-error" id="forceError"></p>
+    </form>
   </section>
 
   <!-- app -->

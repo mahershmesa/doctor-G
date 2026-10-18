@@ -35,7 +35,11 @@ async function api(path, { method = 'GET', body, form } = {}) {
     logout();
     throw new Error(out.error || 'انتهت الجلسة');
   }
-  if (!res.ok) throw new Error(out.error || 'حدث خطأ');
+  if (!res.ok) {
+    const err = new Error(out.error || 'حدث خطأ');
+    err.code = out.code;
+    throw err;
+  }
   return out;
 }
 
@@ -58,7 +62,8 @@ function upload(file, onProgress, url = '/api/admin/upload', field = 'file') {
   });
 }
 
-const fileUrl = (u) => (u && u.startsWith('/api/files/') ? `${u}?t=${encodeURIComponent(state.token)}` : u);
+// Private file links come from the server already signed and short-lived.
+const fileUrl = (u) => u;
 const lines = (s) => String(s || '').split('\n').map((x) => x.trim()).filter(Boolean);
 const fmtDate = (iso) => new Date(iso).toLocaleString('ar-u-nu-latn', { dateStyle: 'medium', timeStyle: 'short' });
 const fmtTime = (iso) => new Date(iso).toLocaleTimeString('ar-u-nu-latn', { hour: 'numeric', minute: '2-digit' });
@@ -140,8 +145,34 @@ function notify(title, body) {
 // ---------- auth ----------
 function showLogin() {
   $('#app').hidden = true;
+  $('#forceForm').hidden = true;
+  $('#loginForm').hidden = false;
   $('#login').hidden = false;
 }
+
+// First login with the default password: must set a new one before seeing any data.
+function showForceChange() {
+  $('#app').hidden = true;
+  $('#loginForm').hidden = true;
+  $('#forceForm').hidden = false;
+  $('#login').hidden = false;
+}
+$('#forceForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  $('#forceError').textContent = '';
+  if (f.next.value !== f.confirm.value) return ($('#forceError').textContent = 'كلمتا المرور غير متطابقتين');
+  try {
+    const out = await api('/admin/password', { method: 'PUT', body: { current: f.current.value, next: f.next.value } });
+    state.token = out.token;
+    try { localStorage.setItem(TOKEN_KEY, out.token); } catch {}
+    f.reset();
+    toast('تم تغيير كلمة المرور ✓', 'ok');
+    start();
+  } catch (ex) {
+    $('#forceError').textContent = ex.message;
+  }
+};
 function logout() {
   try { localStorage.removeItem(TOKEN_KEY); } catch {}
   state.token = null;
@@ -490,7 +521,7 @@ function appendPaneMsg(m, scroll = true) {
   el.className = 'msg ' + m.from;
   el.innerHTML = `<div class="bubble">${m.image ? `<img src="${esc(fileUrl(m.image))}" alt="">` : ''}${esc(m.text)}</div><time>${m.from === 'staff' && m.staffName ? esc(m.staffName) + ' · ' : ''}${fmtTime(m.at)}</time>`;
   const img = el.querySelector('img');
-  if (img) img.onclick = () => openModal(`<div class="modal-head"><h2>صورة</h2><button class="icon-btn" data-close>${icon('close')}</button></div><img class="img-view" src="${img.src}" alt="">`);
+  if (img) img.onclick = () => openModal(`<div class="modal-head"><h2>صورة</h2><button class="icon-btn" data-close>${icon('close')}</button></div><img class="img-view" src="${esc(img.src)}" alt="">`);
   box.appendChild(el);
   if (scroll) scrollPane();
 }
@@ -785,7 +816,7 @@ function viewUsers() {
         <p class="muted small">المساعد يستطيع إدارة الحجوزات وتأكيد الدفع وفتح المحادثات والرد على المرضى، ولا يستطيع تعديل محتوى الموقع.</p>
         <label class="field"><span>الاسم الظاهر</span><input name="name" required></label>
         <label class="field"><span>اسم المستخدم (إنجليزي)</span><input name="username" dir="ltr" required></label>
-        <label class="field"><span>كلمة المرور</span><input name="password" type="text" dir="ltr" required minlength="6"></label>
+        <label class="field"><span>كلمة المرور</span><input name="password" type="text" dir="ltr" required minlength="8"></label>
         <label class="field"><span>الصلاحية</span><select name="role"><option value="assistant">مساعد</option><option value="admin">مدير (كامل الصلاحيات)</option></select></label>
         <button class="btn btn-primary" type="submit">${icon('plus')} إضافة</button>
       </form>
@@ -817,7 +848,7 @@ function viewAccount() {
     <form class="panel" id="passForm" style="max-width:480px">
       <div class="panel-head"><h2>تغيير كلمة المرور</h2></div>
       <label class="field"><span>كلمة المرور الحالية</span><input name="current" type="password" dir="ltr" required autocomplete="current-password"></label>
-      <label class="field"><span>كلمة المرور الجديدة</span><input name="next" type="password" dir="ltr" required minlength="6" autocomplete="new-password"></label>
+      <label class="field"><span>كلمة المرور الجديدة</span><input name="next" type="password" dir="ltr" required minlength="8" autocomplete="new-password"></label>
       <button class="btn btn-primary" type="submit">حفظ</button>
     </form>`;
   $('#passForm').onsubmit = async (e) => {
@@ -912,8 +943,11 @@ function applyBrand() {
 async function start() {
   if (!state.token) return showLogin();
   try {
+    const { user } = await api('/admin/me');
+    if (user.defaultPassword) return showForceChange();
     state.data = await api('/admin/data');
-  } catch {
+  } catch (e) {
+    if (e.code === 'PASSWORD_CHANGE_REQUIRED') return showForceChange();
     return showLogin();
   }
   state.user = state.data.user;

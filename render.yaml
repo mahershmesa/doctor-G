@@ -12,3 +12,5 @@ services:
         sync: false # Render asks for the dashboard password during setup
       - key: SESSION_SECRET
         generateValue: true
+      - key: TRUST_PROXY
+        value: "1" # Render sits behind a proxy; needed for correct visitor IPs

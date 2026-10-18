@@ -26,10 +26,24 @@ const db = new DB(path.join(DATA_DIR, 'db.json'));
 function loadSecret() {
   if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
   const file = path.join(DATA_DIR, 'secret');
-  if (!fs.existsSync(file)) fs.writeFileSync(file, crypto.randomBytes(32).toString('hex'));
+  if (!fs.existsSync(file)) fs.writeFileSync(file, crypto.randomBytes(32).toString('hex'), { mode: 0o600 });
+  try { fs.chmodSync(file, 0o600); } catch {}
   return fs.readFileSync(file, 'utf8').trim();
 }
-const tokens = createTokenService(loadSecret());
+const SECRET = loadSecret();
+const tokens = createTokenService(SECRET);
+
+// Private files (receipts, chat images) are served through short-lived signed links,
+// so no login token ever appears in a URL.
+const FILE_KEY = crypto.createHash('sha256').update('files:' + SECRET).digest();
+const fileSig = (name, exp) => crypto.createHmac('sha256', FILE_KEY).update(name + '.' + exp).digest('base64url').slice(0, 32);
+function signFile(url) {
+  if (!url || !url.startsWith('/api/files/')) return url;
+  const name = path.basename(url);
+  const exp = (Math.floor(Date.now() / 3600000) + 12) * 3600000; // valid 11-12h, stable per hour (cacheable)
+  return `/api/files/${name}?e=${exp}&s=${fileSig(name, exp)}`;
+}
+const signMessage = (m) => (m && m.image ? { ...m, image: signFile(m.image) } : m);
 
 if (!db.data.users.length) {
   const password = process.env.ADMIN_PASSWORD || 'admin123';
@@ -48,6 +62,7 @@ if (!db.data.users.length) {
 }
 
 const findUser = (uid) => db.data.users.find((u) => u.id === uid);
+const MIN_PASSWORD = 8;
 const publicUser = (u) => ({ id: u.id, username: u.username, name: u.name, role: u.role, defaultPassword: !!u.defaultPassword });
 
 // ---------- helpers ----------
@@ -111,24 +126,88 @@ function makeUploader(dir, types, maxMb) {
 const mediaUpload = makeUploader(UPLOAD_DIR, { ...IMAGE_TYPES, ...VIDEO_TYPES }, Number(process.env.MAX_VIDEO_MB) || 200);
 const privateImageUpload = makeUploader(PRIVATE_DIR, IMAGE_TYPES, 10);
 
+// Check the file's real content (magic bytes), not just the type the browser claims.
+function contentMatches(file) {
+  let buf;
+  try {
+    const fd = fs.openSync(file.path, 'r');
+    buf = Buffer.alloc(16);
+    fs.readSync(fd, buf, 0, 16, 0);
+    fs.closeSync(fd);
+  } catch {
+    return false;
+  }
+  const hex = buf.toString('hex');
+  const ascii = buf.toString('latin1');
+  switch (file.mimetype) {
+    case 'image/jpeg': return hex.startsWith('ffd8ff');
+    case 'image/png': return hex.startsWith('89504e470d0a1a0a');
+    case 'image/gif': return ascii.startsWith('GIF87a') || ascii.startsWith('GIF89a');
+    case 'image/webp': return ascii.startsWith('RIFF') && ascii.slice(8, 12) === 'WEBP';
+    case 'video/mp4':
+    case 'video/quicktime': return ascii.slice(4, 8) === 'ftyp' || ['moov', 'mdat', 'wide', 'free'].includes(ascii.slice(4, 8));
+    case 'video/webm': return hex.startsWith('1a45dfa3');
+    default: return false;
+  }
+}
+const removeFile = (file) => file && fs.unlink(file.path, () => {});
+
 // Wrap multer so errors become clean JSON responses.
 const handleUpload = (uploader, field) => (req, res, next) =>
   uploader.single(field)(req, res, (err) => {
-    if (!err) return next();
-    const msg = err.code === 'LIMIT_FILE_SIZE' ? 'حجم الملف كبير جدًا' : err.message || 'فشل رفع الملف';
-    res.status(400).json({ error: msg });
+    if (err) {
+      const msg = err.code === 'LIMIT_FILE_SIZE' ? 'حجم الملف كبير جدًا' : err.message || 'فشل رفع الملف';
+      return res.status(400).json({ error: msg });
+    }
+    if (req.file && !contentMatches(req.file)) {
+      removeFile(req.file);
+      return res.status(400).json({ error: 'الملف تالف أو ليس صورة/فيديو حقيقي' });
+    }
+    // Don't keep files from requests that end up rejected.
+    res.on('finish', () => res.statusCode >= 400 && removeFile(req.file));
+    next();
   });
 
 // ---------- app ----------
 const app = express();
-app.set('trust proxy', 1);
+// Only trust X-Forwarded-For when actually behind a proxy (Render, Nginx...): set TRUST_PROXY=1.
+// Trusting it otherwise lets attackers fake their IP and bypass rate limits.
+const tp = process.env.TRUST_PROXY;
+app.set('trust proxy', tp ? (/^\d+$/.test(tp) ? Number(tp) : tp === 'true' ? true : tp) : false);
 app.disable('x-powered-by');
-app.use(express.json({ limit: '1mb' }));
+
+// Content-Security-Policy: allow only our own scripts (+ the inline import map, by hash).
+const indexHtml = fs.readFileSync(path.join(__dirname, 'public/index.html'), 'utf8');
+const importMap = indexHtml.match(/<script type="importmap">([\s\S]*?)<\/script>/);
+const importMapHash = importMap ? `'sha256-${crypto.createHash('sha256').update(importMap[1]).digest('base64')}'` : '';
+const CSP = [
+  "default-src 'self'",
+  `script-src 'self' ${importMapHash}`,
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https:",
+  "media-src 'self' https: blob:",
+  "connect-src 'self'",
+  'frame-src https://www.youtube-nocookie.com https://www.google.com',
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+].join('; ');
+
 app.use((req, res, next) => {
+  res.setHeader('Content-Security-Policy', CSP);
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  // Patient data must never be cached by browsers or proxies.
+  if (req.path.startsWith('/api/admin') || req.path.startsWith('/api/chat')) res.setHeader('Cache-Control', 'no-store');
   next();
 });
+app.use(express.json({ limit: '1mb' }));
 
 app.use('/vendor/three', express.static(path.join(__dirname, 'node_modules/three'), { maxAge: '7d' }));
 app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d' }));
@@ -189,6 +268,7 @@ app.post('/api/bookings', rateLimit('booking', 8, 10 * 60 * 1000), (req, res) =>
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   if (isNaN(day) || day < today) return res.status(400).json({ error: 'لا يمكن الحجز في تاريخ سابق' });
+  if (day - today > 366 * 864e5) return res.status(400).json({ error: 'لا يمكن الحجز لأكثر من سنة مقدمًا' });
   if (closedDays().includes(day.getDay())) return res.status(400).json({ error: 'العيادة مغلقة في هذا اليوم' });
   if (!slotList().includes(time)) return res.status(400).json({ error: 'الوقت المختار غير متاح' });
   if (takenSlots(date).includes(time)) return res.status(409).json({ error: 'هذا الوقت محجوز، يرجى اختيار وقت آخر' });
@@ -227,7 +307,7 @@ const patientView = (c) => ({
   status: c.status,
   staffNote: c.staffNote || '',
   createdAt: c.createdAt,
-  messages: c.messages,
+  messages: c.messages.map(signMessage),
 });
 const chatSummary = (c) => ({
   id: c.id,
@@ -235,14 +315,14 @@ const chatSummary = (c) => ({
   phone: c.phone,
   paymentMethod: c.paymentMethod,
   note: c.note,
-  receipt: c.receipt,
+  receipt: signFile(c.receipt),
   status: c.status,
   staffNote: c.staffNote || '',
   createdAt: c.createdAt,
   updatedAt: c.updatedAt,
   approvedBy: c.approvedBy || '',
   unreadStaff: c.unreadStaff || 0,
-  lastMessage: c.messages[c.messages.length - 1] || null,
+  lastMessage: signMessage(c.messages[c.messages.length - 1]) || null,
 });
 
 function addMessage(chat, msg) {
@@ -252,9 +332,10 @@ function addMessage(chat, msg) {
   chat.updatedAt = m.at;
   if (m.from === 'patient') chat.unreadStaff = (chat.unreadStaff || 0) + 1;
   db.save();
-  io.to('chat:' + chat.id).emit('chat:message', m);
-  io.to('staff').emit('chat:message', { chatId: chat.id, message: m, summary: chatSummary(chat) });
-  return m;
+  const out = signMessage(m);
+  io.to('chat:' + chat.id).emit('chat:message', out);
+  io.to('staff').emit('chat:message', { chatId: chat.id, message: out, summary: chatSummary(chat) });
+  return out;
 }
 
 app.post(
@@ -313,18 +394,14 @@ app.post('/api/chat/upload', rateLimit('chatimg', 30, 10 * 60 * 1000), (req, res
   res.json({ message: m });
 });
 
-// Private files (receipts, chat images): visible to staff and to the chat's own patient.
+// Private files (receipts, chat images): only through a valid, unexpired signed link.
 app.get('/api/files/:name', (req, res) => {
   const name = path.basename(req.params.name);
-  const url = '/api/files/' + name;
-  const t = str(req.query.t, 500);
-  const staff = tokens.verify(t, findUser);
-  let allowed = !!staff;
-  if (!allowed) {
-    const chat = chatByToken(t);
-    allowed = !!chat && (chat.receipt === url || chat.messages.some((m) => m.image === url));
-  }
-  if (!allowed) return res.status(403).end();
+  const exp = Number(req.query.e);
+  const sig = str(req.query.s, 64);
+  const expected = fileSig(name, exp);
+  const valid = exp > Date.now() && sig.length === expected.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+  if (!valid) return res.status(403).end();
   const file = path.join(PRIVATE_DIR, name);
   if (!fs.existsSync(file)) return res.status(404).end();
   res.setHeader('Cache-Control', 'private, max-age=86400');
@@ -337,6 +414,10 @@ function requireStaff(req, res, next) {
   const user = tokens.verify(header.replace(/^Bearer\s+/i, ''), findUser);
   if (!user) return res.status(401).json({ error: 'يرجى تسجيل الدخول' });
   req.user = user;
+  // Until the default password is changed, nothing else is reachable (protects patient data).
+  if (user.defaultPassword && !['/api/admin/me', '/api/admin/password'].includes(req.path)) {
+    return res.status(403).json({ error: 'يجب تغيير كلمة المرور الافتراضية أولًا', code: 'PASSWORD_CHANGE_REQUIRED' });
+  }
   next();
 }
 function requireAdmin(req, res, next) {
@@ -344,13 +425,25 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+const DUMMY = hashPassword(crypto.randomBytes(16).toString('hex'));
+const failedLogins = new Map(); // username -> [timestamps], slows down distributed guessing
+
 app.post('/api/admin/login', rateLimit('login', 10, 15 * 60 * 1000), (req, res) => {
   const username = str(req.body?.username, 100).toLowerCase();
   const password = str(req.body?.password, 200);
+  const now = Date.now();
+  const fails = (failedLogins.get(username) || []).filter((t) => now - t < 15 * 60 * 1000);
+  if (fails.length >= 20) return res.status(429).json({ error: 'محاولات كثيرة لهذا الحساب، حاول بعد 15 دقيقة' });
   const user = db.data.users.find((u) => u.username.toLowerCase() === username);
-  if (!user || !verifyPassword(password, user.salt, user.hash)) {
+  // Always run the (slow) hash check so response time doesn't reveal whether a username exists.
+  const ok = verifyPassword(password, user ? user.salt : DUMMY.salt, user ? user.hash : DUMMY.hash) && !!user;
+  if (!ok) {
+    fails.push(now);
+    failedLogins.set(username, fails);
+    if (failedLogins.size > 10000) failedLogins.clear();
     return res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
   }
+  failedLogins.delete(username);
   res.json({ token: tokens.issue(user), user: publicUser(user) });
 });
 
@@ -373,9 +466,12 @@ app.put('/api/admin/password', requireStaff, (req, res) => {
   if (!verifyPassword(str(current, 200), req.user.salt, req.user.hash)) {
     return res.status(400).json({ error: 'كلمة المرور الحالية غير صحيحة' });
   }
-  if (str(nextPass, 200).length < 6) return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' });
-  Object.assign(req.user, hashPassword(str(nextPass, 200)), { defaultPassword: false });
+  const np = str(nextPass, 200);
+  if (np.length < MIN_PASSWORD) return res.status(400).json({ error: `كلمة المرور يجب أن تكون ${MIN_PASSWORD} أحرف على الأقل` });
+  if (np === str(current, 200) || np === 'admin123') return res.status(400).json({ error: 'اختر كلمة مرور جديدة مختلفة' });
+  Object.assign(req.user, hashPassword(np), { defaultPassword: false });
   db.save();
+  disconnectUser(req.user.id); // old sessions on other devices stop receiving live data
   res.json({ token: tokens.issue(req.user), user: publicUser(req.user) });
 });
 
@@ -499,7 +595,7 @@ app.get('/api/admin/chats/:id', requireStaff, (req, res) => {
   if (!c) return res.status(404).json({ error: 'غير موجود' });
   c.unreadStaff = 0;
   db.save();
-  res.json({ chat: { ...chatSummary(c), messages: c.messages } });
+  res.json({ chat: { ...chatSummary(c), messages: c.messages.map(signMessage) } });
 });
 
 app.patch('/api/admin/chats/:id', requireStaff, (req, res) => {
@@ -527,6 +623,7 @@ app.delete('/api/admin/chats/:id', requireStaff, requireAdmin, (req, res) => {
   const [c] = db.data.chats.splice(i, 1);
   db.save();
   io.to('chat:' + c.id).emit('chat:status', { status: 'closed', staffNote: '' });
+  io.in('chat:' + c.id).disconnectSockets(true);
   io.to('staff').emit('chat:delete', c.id);
   res.json({ ok: true });
 });
@@ -544,7 +641,7 @@ app.post('/api/admin/users', requireStaff, requireAdmin, (req, res) => {
   const username = str(req.body?.username, 50);
   const password = str(req.body?.password, 200);
   if (!/^[a-zA-Z0-9_.-]{3,50}$/.test(username)) return res.status(400).json({ error: 'اسم المستخدم: أحرف إنجليزية وأرقام فقط (3 أحرف على الأقل)' });
-  if (password.length < 6) return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' });
+  if (password.length < MIN_PASSWORD) return res.status(400).json({ error: `كلمة المرور يجب أن تكون ${MIN_PASSWORD} أحرف على الأقل` });
   if (db.data.users.some((u) => u.username.toLowerCase() === username.toLowerCase())) {
     return res.status(409).json({ error: 'اسم المستخدم مستخدم مسبقًا' });
   }
@@ -566,10 +663,19 @@ app.delete('/api/admin/users/:id', requireStaff, requireAdmin, (req, res) => {
   if (i < 0) return res.status(404).json({ error: 'غير موجود' });
   db.data.users.splice(i, 1);
   db.save();
+  disconnectUser(req.params.id);
   res.json({ ok: true });
 });
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'not found' }));
+
+// Never leak stack traces or internals to visitors.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  const status = err.status || err.statusCode || 500;
+  if (status >= 500) console.error(err);
+  res.status(status).json({ error: status < 500 ? 'طلب غير صالح' : 'حدث خطأ في الخادم' });
+});
 
 // ---------- realtime ----------
 const server = http.createServer(app);
@@ -579,7 +685,7 @@ io.use((socket, next) => {
   const { staffToken, chatToken } = socket.handshake.auth || {};
   if (staffToken) {
     const user = tokens.verify(staffToken, findUser);
-    if (!user) return next(new Error('unauthorized'));
+    if (!user || user.defaultPassword) return next(new Error('unauthorized'));
     socket.data.user = user;
     return next();
   }
@@ -621,8 +727,17 @@ io.on('connection', (socket) => {
     last = Date.now();
     addMessage(c, { from: 'patient', text: t });
   });
-  socket.on('patient:typing', () => io.to('staff').emit('chat:typing', socket.data.chatId));
+  let lastTyping = 0;
+  socket.on('patient:typing', () => {
+    if (Date.now() - lastTyping < 1500) return;
+    lastTyping = Date.now();
+    io.to('staff').emit('chat:typing', socket.data.chatId);
+  });
 });
+
+function disconnectUser(userId) {
+  for (const sock of io.sockets.sockets.values()) if (sock.data.user?.id === userId) sock.disconnect(true);
+}
 
 function shutdown() {
   db.flush();

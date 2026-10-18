@@ -55,8 +55,8 @@ test('admin API requires login and the assistant role cannot edit content', asyn
   assert.equal(settings.heroTitle, 'جديد');
   assert.equal(settings.instagram, '', 'unsafe links are rejected');
 
-  await fetch(base + '/api/admin/users', { method: 'POST', headers: json(token), body: JSON.stringify({ username: 'asst', password: 'secret1', role: 'assistant' }) });
-  const a = await (await fetch(base + '/api/admin/login', { method: 'POST', headers: json(), body: JSON.stringify({ username: 'asst', password: 'secret1' }) })).json();
+  await fetch(base + '/api/admin/users', { method: 'POST', headers: json(token), body: JSON.stringify({ username: 'asst', password: 'secret12', role: 'assistant' }) });
+  const a = await (await fetch(base + '/api/admin/login', { method: 'POST', headers: json(), body: JSON.stringify({ username: 'asst', password: 'secret12' }) })).json();
   assert.equal((await fetch(base + '/api/admin/settings', { method: 'PUT', headers: json(a.token), body: '{}' })).status, 403);
   assert.equal((await fetch(base + '/api/admin/services', { method: 'POST', headers: json(a.token), body: '{}' })).status, 403);
 });
