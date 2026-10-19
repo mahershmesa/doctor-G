@@ -22,15 +22,15 @@
     <div class="container header-inner">
       <a class="brand" href="#home" id="brand"></a>
       <nav class="nav" id="nav" aria-label="القائمة الرئيسية">
-        <a href="#home">الرئيسية</a>
-        <a href="#about">عن الطبيبة</a>
-        <a href="#services">الخدمات</a>
-        <a href="#portfolio">أعمالنا</a>
-        <a href="#testimonials">آراء المرضى</a>
-        <a href="#contact">تواصل</a>
-        <a href="#booking" class="btn btn-primary nav-cta">احجز موعد</a>
+        <a href="#home" data-i18n="nav_home">الرئيسية</a>
+        <a href="#about" data-i18n="nav_about">عن الطبيبة</a>
+        <a href="#services" data-i18n="nav_services">الخدمات</a>
+        <a href="#portfolio" data-i18n="nav_portfolio">أعمالنا</a>
+        <a href="#testimonials" data-i18n="nav_testimonials">آراء المرضى</a>
+        <a href="#contact" data-i18n="nav_contact">تواصل</a>
+        <a href="#booking" class="btn btn-primary nav-cta" data-i18n="nav_book">احجز موعد</a>
       </nav>
-      <button class="menu-toggle" id="menuToggle" aria-label="فتح القائمة" aria-expanded="false"></button>
+      <div class="header-tools"><span id="langSlot"></span><button class="menu-toggle" id="menuToggle" aria-label="فتح القائمة" data-i18n-aria="menu_open" aria-expanded="false"></button></div>
     </div>
   </header>
 
@@ -51,14 +51,14 @@
         </div>
         <div class="hero-visual reveal">
           <div class="visual-halo" aria-hidden="true"></div>
-          <canvas id="tooth3d" aria-label="مجسم ثلاثي الأبعاد لسن" role="img"></canvas>
+          <canvas id="tooth3d" aria-label="مجسم ثلاثي الأبعاد لسن" data-i18n-aria="tooth_alt" role="img"></canvas>
           <img id="heroImage" alt="" hidden />
           <div class="float-card fc-1"><span class="fc-icon" id="fcIcon1"></span><div><strong data-bind="doctorName"></strong><small data-bind="doctorTitle"></small></div></div>
-          <div class="float-card fc-2"><span class="fc-icon star" id="fcIcon2"></span><div><strong>5.0</strong><small>تقييم المرضى</small></div></div>
-          <span class="drag-hint" id="dragHint">اسحب لتدوير المجسم</span>
+          <div class="float-card fc-2"><span class="fc-icon star" id="fcIcon2"></span><div><strong>5.0</strong><small data-i18n="rating">تقييم المرضى</small></div></div>
+          <span class="drag-hint" id="dragHint" data-i18n="drag">اسحب لتدوير المجسم</span>
         </div>
       </div>
-      <a href="#about" class="scroll-cue" aria-label="انتقل للأسفل"><span></span></a>
+      <a href="#about" class="scroll-cue" aria-label="انتقل للأسفل" data-i18n-aria="scroll_down"><span></span></a>
     </section>
 
     <!-- ABOUT -->
@@ -69,13 +69,13 @@
           <div class="exp-badge" id="expBadge"></div>
         </div>
         <div class="about-text reveal">
-          <span class="eyebrow">تعرّف علينا</span>
+          <span class="eyebrow" data-i18n="eb_about">تعرّف علينا</span>
           <h2 data-bind="aboutTitle"></h2>
           <div class="rich" id="aboutText"></div>
           <ul class="checklist" id="aboutHighlights"></ul>
           <div class="about-actions">
-            <a href="#booking" class="btn btn-primary">احجز استشارتك</a>
-            <a href="#portfolio" class="btn btn-soft">شاهد أعمالنا</a>
+            <a href="#booking" class="btn btn-primary" data-i18n="about_book">احجز استشارتك</a>
+            <a href="#portfolio" class="btn btn-soft" data-i18n="about_work">شاهد أعمالنا</a>
           </div>
         </div>
       </div>
@@ -85,7 +85,7 @@
     <section class="section alt" id="services">
       <div class="container">
         <div class="section-head reveal">
-          <span class="eyebrow">ماذا نقدّم</span>
+          <span class="eyebrow" data-i18n="eb_services">ماذا نقدّم</span>
           <h2 data-bind="servicesTitle"></h2>
           <p data-bind="servicesSubtitle"></p>
         </div>
@@ -97,7 +97,7 @@
     <section class="section" id="portfolio">
       <div class="container">
         <div class="section-head reveal">
-          <span class="eyebrow">بورتفوليو</span>
+          <span class="eyebrow" data-i18n="eb_portfolio">بورتفوليو</span>
           <h2 data-bind="portfolioTitle"></h2>
           <p data-bind="portfolioSubtitle"></p>
         </div>
@@ -110,7 +110,7 @@
     <section class="section alt" id="testimonials">
       <div class="container">
         <div class="section-head reveal">
-          <span class="eyebrow">قصص نجاح</span>
+          <span class="eyebrow" data-i18n="eb_testimonials">قصص نجاح</span>
           <h2 data-bind="testimonialsTitle"></h2>
           <p data-bind="testimonialsSubtitle"></p>
         </div>
@@ -122,36 +122,37 @@
     <section class="section booking-section" id="booking">
       <div class="container booking-grid">
         <div class="booking-info reveal">
-          <span class="eyebrow light">موعدك بخطوة</span>
+          <span class="eyebrow light" data-i18n="eb_booking">موعدك بخطوة</span>
           <h2 data-bind="bookingTitle"></h2>
           <p data-bind="bookingSubtitle"></p>
           <div class="info-block">
-            <h3><span id="hoursIcon"></span> أوقات العمل</h3>
+            <h3><span id="hoursIcon"></span> <span data-i18n="hours">أوقات العمل</span></h3>
             <ul class="hours" id="workingHours"></ul>
           </div>
           <div class="info-block">
-            <h3><span id="payIcon"></span> طرق الدفع المتاحة</h3>
+            <h3><span id="payIcon"></span> <span data-i18n="payments">طرق الدفع المتاحة</span></h3>
             <div class="pay-list" id="payList"></div>
           </div>
         </div>
         <form class="booking-form card reveal" id="bookingForm" novalidate>
           <div class="form-row">
-            <label class="field"><span>الاسم الكامل *</span><input name="name" required maxlength="100" autocomplete="name" /></label>
-            <label class="field"><span>رقم الهاتف / واتساب *</span><input name="phone" required inputmode="tel" dir="ltr" maxlength="30" autocomplete="tel" placeholder="07xx xxx xxxx" /></label>
+            <label class="field"><span data-i18n="f_name">الاسم الكامل *</span><input name="name" required maxlength="100" autocomplete="name" /></label>
+            <label class="field"><span data-i18n="f_phone">رقم الهاتف / واتساب *</span><input name="phone" required inputmode="tel" dir="ltr" maxlength="30" autocomplete="tel" placeholder="07xx xxx xxxx" /></label>
           </div>
-          <label class="field"><span>الخدمة</span><select name="service" id="serviceSelect"></select></label>
+          <label class="field"><span data-i18n="f_service">الخدمة</span><select name="service" id="serviceSelect"></select></label>
           <div class="form-row">
-            <label class="field"><span>التاريخ *</span><input type="date" name="date" id="dateInput" required /></label>
-            <div class="field"><span>طريقة الدفع</span><select name="paymentMethod" id="bookingPay"></select></div>
+            <label class="field"><span data-i18n="f_date">التاريخ *</span><input type="date" name="date" id="dateInput" required /></label>
+            <div class="field"><span data-i18n="f_pay">طريقة الدفع</span><select name="paymentMethod" id="bookingPay"></select></div>
           </div>
           <div class="field">
-            <span>الوقت *</span>
-            <div class="slots" id="slots"><p class="muted small">اختر التاريخ أولًا</p></div>
+            <span data-i18n="f_time">الوقت *</span>
+            <div class="slots" id="slots"><p class="muted small" data-i18n="pick_date">اختر التاريخ أولًا</p></div>
           </div>
-          <label class="field"><span>ملاحظات</span><textarea name="notes" rows="3" maxlength="1000" placeholder="اكتب أي تفاصيل تود مشاركتها مع الطبيبة"></textarea></label>
+          <label class="field"><span data-i18n="f_notes">ملاحظات</span><textarea name="notes" rows="3" maxlength="1000" data-i18n-ph="f_notes_ph"></textarea></label>
           <p class="muted small" data-bind="bookingNote"></p>
           <button class="btn btn-whatsapp btn-lg btn-block" type="submit" id="bookingSubmit"></button>
           <p class="form-error" id="bookingError" role="alert"></p>
+          <p class="consent small muted" id="bookingConsent"></p>
         </form>
       </div>
     </section>
@@ -160,7 +161,7 @@
     <section class="section" id="faq">
       <div class="container narrow">
         <div class="section-head reveal">
-          <span class="eyebrow">لديك سؤال؟</span>
+          <span class="eyebrow" data-i18n="eb_faq">لديك سؤال؟</span>
           <h2 data-bind="faqTitle"></h2>
         </div>
         <div class="faq" id="faqList"></div>
@@ -171,7 +172,7 @@
     <section class="section alt" id="contact">
       <div class="container">
         <div class="section-head reveal">
-          <span class="eyebrow">نحن هنا لأجلك</span>
+          <span class="eyebrow" data-i18n="eb_contact">نحن هنا لأجلك</span>
           <h2 data-bind="contactTitle"></h2>
         </div>
         <div class="contact-grid">
@@ -186,14 +187,14 @@
     <div class="container footer-inner">
       <div class="brand footer-brand" id="footerBrand"></div>
       <div class="socials" id="socials"></div>
-      <p class="muted small" id="copyright"></p>
+      <p class="muted small"><span id="copyright"></span> · <a class="footer-link" id="privacyLink" href="/privacy" data-i18n="privacy">سياسة الخصوصية</a></p>
     </div>
   </footer>
 
   <!-- floating buttons -->
   <div class="fabs">
     <a class="fab fab-wa" id="fabWhatsapp" target="_blank" rel="noopener" aria-label="واتساب"></a>
-    <button class="fab fab-chat" id="fabChat" type="button" aria-label="الدردشة مع الطبيبة"><span class="fab-dot" hidden></span></button>
+    <button class="fab fab-chat" id="fabChat" type="button" aria-label="الدردشة مع الطبيبة" data-i18n-aria="chat_with"><span class="fab-dot" hidden></span></button>
   </div>
 
   <!-- chat panel -->

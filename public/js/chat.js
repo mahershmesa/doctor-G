@@ -2,6 +2,7 @@
 // from the dashboard; then it unlocks instantly (pushed over Socket.io).
 
 import { icon, esc } from './icons.js';
+import { t, lang, locale } from './i18n.js';
 
 const $ = (s, root = document) => root.querySelector(s);
 const KEY = 'dg_chat_token';
@@ -22,7 +23,7 @@ let lastRequest = null; // whatsapp + message to notify clinic
 const panel = () => $('#chatPanel');
 const body = () => $('#chatBody');
 const fileUrl = (u) => u; // links arrive signed from the server
-const timeFmt = (iso) => new Date(iso).toLocaleTimeString('ar-u-nu-latn', { hour: 'numeric', minute: '2-digit' });
+const timeFmt = (iso) => new Date(iso).toLocaleTimeString(locale(), { hour: 'numeric', minute: '2-digit' });
 
 export function initChat(c) {
   ctx = c;
@@ -37,7 +38,9 @@ export function initChat(c) {
 export function refresh() {
   const s = ctx.getContent().settings;
   $('#chatAvatar').innerHTML = s.doctorPhoto ? `<img src="${esc(s.doctorPhoto)}" alt="">` : icon('tooth');
-  if (!token && panel().classList.contains('open')) renderGate();
+  // Re-draw in the newly selected language.
+  if (panel().classList.contains('open')) chat ? renderState() : renderGate();
+  else if (chat?.status === 'approved') setStatusText(t('online'), true);
 }
 
 function open() {
@@ -76,9 +79,9 @@ async function loadSession(render) {
     chat = (await res.json()).chat;
     connect();
     if (render) renderState();
-    else if (chat.status === 'approved') setStatusText('متصل', true);
+    else if (chat.status === 'approved') setStatusText(t('online'), true);
   } catch {
-    if (render) body().innerHTML = `<div class="status-box"><p>تعذر الاتصال، حاول مجددًا.</p></div>`;
+    if (render) body().innerHTML = `<div class="status-box"><p>${esc(t('conn_error'))}</p></div>`;
   }
 }
 
@@ -98,14 +101,14 @@ function connect() {
     chat.staffNote = staffNote;
     if (panel().classList.contains('open')) renderState();
     if (was !== 'approved' && status === 'approved') {
-      ctx.toast('تم تأكيد الدفع وفتح المحادثة مع الطبيبة ✓');
+      ctx.toast(t('approved_toast'));
       notifyDot();
     }
   });
   socket.on('chat:typing', () => {
     const el = $('#typing');
     if (!el) return;
-    el.textContent = 'الطبيبة تكتب…';
+    el.textContent = t('typing');
     clearTimeout(typingTimer);
     typingTimer = setTimeout(() => (el.textContent = ''), 2500);
   });
@@ -125,9 +128,9 @@ function reset() {
 function renderGate() {
   const content = ctx.getContent();
   const s = content.settings;
-  setStatusText('استشارة خاصة مدفوعة');
+  setStatusText(t('chat_paid'));
   if (!s.chatEnabled) {
-    body().innerHTML = `<div class="status-box"><p>الدردشة غير متاحة حاليًا. يمكنك التواصل عبر واتساب.</p></div>`;
+    body().innerHTML = `<div class="status-box"><p>${esc(t('chat_off'))}</p></div>`;
     return;
   }
   const pays = content.paymentMethods;
@@ -135,24 +138,25 @@ function renderGate() {
     <form class="chat-gate" id="gateForm" novalidate>
       <div class="gate-hero">
         <div class="gate-lock">${icon('lock')}</div>
-        <h3>الدردشة المباشرة مع الطبيبة</h3>
+        <h3>${esc(t('chat_title'))}</h3>
         <p>${esc(s.chatIntro || '')}</p>
-        ${s.chatPrice ? `<span class="gate-price">رسوم الاستشارة: ${esc(s.chatPrice)}</span>` : ''}
+        ${s.chatPrice ? `<span class="gate-price">${esc(t('chat_fee'))} ${esc(s.chatPrice)}</span>` : ''}
       </div>
       <ol class="steps">
-        <li>ادفع رسوم الاستشارة بإحدى طرق الدفع</li>
-        <li>أرسل الطلب مع صورة إيصال الدفع</li>
-        <li>بعد تأكيد العيادة تُفتح المحادثة فورًا</li>
+        <li>${esc(t('step1'))}</li>
+        <li>${esc(t('step2'))}</li>
+        <li>${esc(t('step3'))}</li>
       </ol>
-      <label class="field"><span>الاسم *</span><input name="name" required maxlength="100" autocomplete="name"></label>
-      <label class="field"><span>رقم الهاتف / واتساب *</span><input name="phone" required inputmode="tel" dir="ltr" maxlength="30" autocomplete="tel"></label>
-      <div class="field"><span>طريقة الدفع</span>
+      <label class="field"><span>${esc(t('c_name'))}</span><input name="name" required maxlength="100" autocomplete="name"></label>
+      <label class="field"><span>${esc(t('c_phone'))}</span><input name="phone" required inputmode="tel" dir="ltr" maxlength="30" autocomplete="tel"></label>
+      <div class="field"><span>${esc(t('f_pay'))}</span>
         <select name="paymentMethod" id="gatePay">${pays.map((p) => `<option>${esc(p.name)}</option>`).join('')}</select>
         <div class="pay-detail" id="gatePayDetail"></div>
       </div>
-      <label class="file-drop" id="receiptDrop">${icon('image')}<span>إرفاق صورة إيصال الدفع (اختياري)</span><input type="file" name="receipt" accept="image/*"></label>
-      <label class="field" style="margin-top:.75rem"><span>نبذة عن حالتك</span><textarea name="note" rows="2" maxlength="1000"></textarea></label>
-      <button class="btn btn-primary btn-block" type="submit">${icon('send')} إرسال طلب فتح المحادثة</button>
+      <label class="file-drop" id="receiptDrop">${icon('image')}<span>${esc(t('c_receipt'))}</span><input type="file" name="receipt" accept="image/*"></label>
+      <label class="field" style="margin-top:.75rem"><span>${esc(t('c_note'))}</span><textarea name="note" rows="2" maxlength="1000"></textarea></label>
+      <button class="btn btn-primary btn-block" type="submit">${icon('send')} ${esc(t('c_send_req'))}</button>
+      <p class="consent small muted">${esc(t('consent'))} <a href="/privacy?lang=${lang()}" target="_blank" rel="noopener">${esc(t('privacy'))}</a> ${esc(t('consent_after'))}</p>
       <p class="form-error" id="gateError"></p>
     </form>`;
   const showPay = () => {
@@ -167,7 +171,7 @@ function renderGate() {
   fileInput.onchange = () => {
     const f = fileInput.files[0];
     $('#receiptDrop').classList.toggle('has', !!f);
-    $('#receiptDrop span').textContent = f ? f.name : 'إرفاق صورة إيصال الدفع (اختياري)';
+    $('#receiptDrop span').textContent = f ? f.name : t('c_receipt');
   };
   $('#gateForm').onsubmit = async (e) => {
     e.preventDefault();
@@ -175,15 +179,17 @@ function renderGate() {
     const err = $('#gateError');
     err.textContent = '';
     if (!form.name.value.trim() || !/^[+\d\s()-]{6,30}$/.test(form.phone.value.trim())) {
-      err.textContent = 'يرجى إدخال الاسم ورقم هاتف صحيح';
+      err.textContent = t('c_err');
       return;
     }
     const btn = form.querySelector('button[type=submit]');
     btn.disabled = true;
     try {
-      const res = await fetch('/api/chat/request', { method: 'POST', body: new FormData(form) });
+      const fd = new FormData(form);
+      fd.append('lang', lang());
+      const res = await fetch('/api/chat/request?lang=' + lang(), { method: 'POST', body: fd });
       const out = await res.json();
-      if (!res.ok) throw new Error(out.error || 'حدث خطأ');
+      if (!res.ok) throw new Error(out.error || t('err_generic'));
       token = out.token;
       store.set(token);
       chat = out.chat;
@@ -201,51 +207,51 @@ function renderState() {
   if (!chat) return renderGate();
   const st = chat.status;
   if (st === 'pending') {
-    setStatusText('بانتظار تأكيد الدفع');
+    setStatusText(t('pending_status'));
     const req = lastRequest || {
       whatsapp: String(ctx.getContent().settings.whatsapp || '').replace(/\D/g, ''),
-      message: `مرحبًا، أرسلت طلب استشارة مباشرة عبر الموقع باسم ${chat.name}. يرجى تأكيد الدفع وفتح المحادثة.`,
+      message: t('wa_fallback', chat.name),
     };
     const wa = req.whatsapp
-      ? `<a class="btn btn-whatsapp" target="_blank" rel="noopener" href="https://wa.me/${esc(req.whatsapp)}?text=${encodeURIComponent(req.message)}">${icon('whatsapp')} إبلاغ العيادة عبر واتساب</a>`
+      ? `<a class="btn btn-whatsapp" target="_blank" rel="noopener" href="https://wa.me/${esc(req.whatsapp)}?text=${encodeURIComponent(req.message)}">${icon('whatsapp')} ${esc(t('notify_wa'))}</a>`
       : '';
     body().innerHTML = `
       <div class="status-box">
         <div class="ring-loader"></div>
-        <h3>طلبك قيد المراجعة</h3>
-        <p>ستقوم الطبيبة أو المساعد بتأكيد الدفع وفتح المحادثة لك. ستُفتح هنا تلقائيًا فور الموافقة.</p>
+        <h3>${esc(t('pending_title'))}</h3>
+        <p>${esc(t('pending_text'))}</p>
         ${wa}
-        <p style="margin-top:1rem"><button class="btn btn-soft" type="button" id="cancelReq">إلغاء الطلب</button></p>
+        <p style="margin-top:1rem"><button class="btn btn-soft" type="button" id="cancelReq">${esc(t('cancel_req'))}</button></p>
       </div>`;
     $('#cancelReq').onclick = reset;
     return;
   }
   if (st === 'rejected') {
-    setStatusText('لم يتم تأكيد الطلب');
+    setStatusText(t('rejected_status'));
     body().innerHTML = `
       <div class="status-box">
         <div class="status-icon">${icon('close')}</div>
-        <h3>لم يتم تأكيد الدفع</h3>
-        ${chat.staffNote ? `<div class="staff-note">${esc(chat.staffNote)}</div>` : '<p>يرجى التأكد من الدفع والمحاولة مجددًا أو التواصل عبر واتساب.</p>'}
-        <button class="btn btn-primary" type="button" id="newReq">إرسال طلب جديد</button>
+        <h3>${esc(t('rejected_title'))}</h3>
+        ${chat.staffNote ? `<div class="staff-note">${esc(chat.staffNote)}</div>` : `<p>${esc(t('rejected_text'))}</p>`}
+        <button class="btn btn-primary" type="button" id="newReq">${esc(t('new_req'))}</button>
       </div>`;
     $('#newReq').onclick = reset;
     return;
   }
   // approved / closed
   const closed = st === 'closed';
-  setStatusText(closed ? 'انتهت المحادثة' : 'متصل — المحادثة مفتوحة', !closed);
+  setStatusText(closed ? t('closed_status') : t('open_status'), !closed);
   body().innerHTML = `
     <div class="chat-scroll" id="chatScroll">
-      <div class="msg system"><div class="bubble">${icon('unlock')} تم فتح المحادثة. مرحبًا ${esc(chat.name)}، اكتب سؤالك للطبيبة.</div></div>
+      <div class="msg system"><div class="bubble">${icon('unlock')} ${esc(t('opened', chat.name))}</div></div>
     </div>
     <div class="typing" id="typing"></div>
     ${closed
-      ? `<div class="status-box" style="padding:1rem;margin:0"><p>أُغلقت هذه المحادثة من قبل العيادة.</p><button class="btn btn-primary" id="newReq" type="button">طلب استشارة جديدة</button></div>`
+      ? `<div class="status-box" style="padding:1rem;margin:0"><p>${esc(t('closed_text'))}</p><button class="btn btn-primary" id="newReq" type="button">${esc(t('new_consult'))}</button></div>`
       : `<form class="chat-input" id="chatForm">
-          <label class="round attach" title="إرسال صورة">${icon('image')}<input type="file" accept="image/*" hidden id="chatFile"></label>
-          <textarea rows="1" id="chatText" placeholder="اكتب رسالتك…" maxlength="4000"></textarea>
-          <button class="round send" type="submit" aria-label="إرسال">${icon('send')}</button>
+          <label class="round attach" title="${esc(t('send_image'))}">${icon('image')}<input type="file" accept="image/*" hidden id="chatFile"></label>
+          <textarea rows="1" id="chatText" placeholder="${esc(t('type_msg'))}" maxlength="4000"></textarea>
+          <button class="round send" type="submit" aria-label="${esc(t('send'))}">${icon('send')}</button>
         </form>`}`;
   chat.messages.forEach((m) => appendMessage(m, false));
   scrollDown();
@@ -280,9 +286,9 @@ function renderState() {
     if (!f) return;
     const fd = new FormData();
     fd.append('image', f);
-    ctx.toast('جارِ رفع الصورة…');
-    const res = await fetch('/api/chat/upload', { method: 'POST', headers: { 'x-chat-token': token }, body: fd });
-    if (!res.ok) ctx.toast((await res.json().catch(() => ({}))).error || 'فشل رفع الصورة', 'error');
+    ctx.toast(t('uploading'));
+    const res = await fetch('/api/chat/upload', { method: 'POST', headers: { 'x-chat-token': token, 'x-lang': lang() }, body: fd });
+    if (!res.ok) ctx.toast((await res.json().catch(() => ({}))).error || t('upload_failed'), 'error');
   };
 }
 
@@ -292,7 +298,7 @@ function appendMessage(m, scroll = true) {
   const mine = m.from === 'patient';
   const el = document.createElement('div');
   el.className = `msg ${mine ? 'me' : 'them'}`;
-  el.innerHTML = `<div class="bubble">${m.image ? `<img src="${esc(fileUrl(m.image))}" alt="صورة" loading="lazy">` : ''}${esc(m.text)}</div><time>${!mine && m.staffName ? esc(m.staffName) + ' · ' : ''}${timeFmt(m.at)}</time>`;
+  el.innerHTML = `<div class="bubble">${m.image ? `<img src="${esc(fileUrl(m.image))}" alt="${esc(t('image'))}" loading="lazy">` : ''}${esc(m.text)}</div><time>${!mine && m.staffName ? esc(m.staffName) + ' · ' : ''}${timeFmt(m.at)}</time>`;
   const img = el.querySelector('img');
   if (img) img.onclick = () => window.open(img.src, '_blank');
   box.appendChild(el);

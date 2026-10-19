@@ -11,11 +11,14 @@ const { Server } = require('socket.io');
 
 const DB = require('./lib/db');
 const { hashPassword, verifyPassword, createTokenService } = require('./lib/auth');
+const { LANGS, TRANSLATABLE, mergeI18n, applyLang, msg } = require('./lib/i18n');
+const { createBackupService } = require('./lib/backup');
 
 const PORT = Number(process.env.PORT) || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
 const PRIVATE_DIR = path.join(DATA_DIR, 'private'); // payment receipts & chat images
+const BACKUP_DIR = process.env.BACKUP_DIR || path.join(DATA_DIR, 'backups');
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 fs.mkdirSync(PRIVATE_DIR, { recursive: true });
@@ -61,9 +64,36 @@ if (!db.data.users.length) {
   console.log(`Created admin user "${db.data.users[0].username}" (password: ${process.env.ADMIN_PASSWORD ? 'from ADMIN_PASSWORD' : 'admin123 — change it!'})`);
 }
 
+// Emergency reset for the site owner: set ADMIN_RESET_PASSWORD and restart. It is applied once
+// (the doctor must then choose a new password), and ignored on later restarts with the same value.
+if (process.env.ADMIN_RESET_PASSWORD) {
+  const fingerprint = crypto.createHash('sha256').update('reset:' + process.env.ADMIN_RESET_PASSWORD).digest('hex');
+  const target =
+    db.data.users.find((u) => u.username === process.env.ADMIN_USERNAME) || db.data.users.find((u) => u.role === 'admin');
+  if (target && db.data.appliedReset !== fingerprint) {
+    Object.assign(target, hashPassword(process.env.ADMIN_RESET_PASSWORD), { defaultPassword: true });
+    db.data.appliedReset = fingerprint;
+    db.flush();
+    console.log(`Password of "${target.username}" was reset from ADMIN_RESET_PASSWORD. Remove that variable now.`);
+  }
+}
+
 const findUser = (uid) => db.data.users.find((u) => u.id === uid);
 const MIN_PASSWORD = 8;
-const publicUser = (u) => ({ id: u.id, username: u.username, name: u.name, role: u.role, defaultPassword: !!u.defaultPassword });
+const publicUser = (u) => ({
+  id: u.id, username: u.username, name: u.name, role: u.role,
+  defaultPassword: !!u.defaultPassword, hasRecovery: !!u.recovery,
+});
+
+// Recovery codes: shown to the user once, stored only as a hash. Format XXXX-XXXX-XXXX-XXXX.
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function newRecoveryCode(user) {
+  const bytes = crypto.randomBytes(16);
+  const raw = [...bytes].map((b) => CODE_CHARS[b % CODE_CHARS.length]).join('');
+  user.recovery = hashPassword(raw);
+  return raw.match(/.{4}/g).join('-');
+}
+const normalizeCode = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16);
 
 // ---------- helpers ----------
 const str = (v, max = 2000) => (v === undefined || v === null ? '' : String(v).trim().slice(0, max));
@@ -94,7 +124,7 @@ function rateLimit(name, limit, windowMs) {
     const now = Date.now();
     const list = (hits.get(key) || []).filter((t) => now - t < windowMs);
     if (list.length >= limit) {
-      return res.status(429).json({ error: 'طلبات كثيرة، يرجى المحاولة بعد قليل.' });
+      return res.status(429).json({ error: msg(req, 'tooMany') });
     }
     list.push(now);
     hits.set(key, list);
@@ -119,7 +149,7 @@ function makeUploader(dir, types, maxMb) {
     limits: { fileSize: maxMb * 1024 * 1024, files: 1 },
     fileFilter: (req, file, cb) => {
       if (types[file.mimetype]) cb(null, true);
-      else cb(new Error('نوع الملف غير مدعوم'));
+      else cb(Object.assign(new Error('bad type'), { code: 'BAD_TYPE' }));
     },
   });
 }
@@ -150,18 +180,21 @@ function contentMatches(file) {
     default: return false;
   }
 }
-const removeFile = (file) => file && fs.unlink(file.path, () => {});
+const removeFile = (file) => {
+  if (!file) return;
+  try { fs.rmSync(file.path, { force: true }); } catch {}
+};
 
 // Wrap multer so errors become clean JSON responses.
 const handleUpload = (uploader, field) => (req, res, next) =>
   uploader.single(field)(req, res, (err) => {
     if (err) {
-      const msg = err.code === 'LIMIT_FILE_SIZE' ? 'حجم الملف كبير جدًا' : err.message || 'فشل رفع الملف';
-      return res.status(400).json({ error: msg });
+      const key = err.code === 'LIMIT_FILE_SIZE' ? 'fileTooBig' : err.code === 'BAD_TYPE' ? 'badType' : 'badFile';
+      return res.status(400).json({ error: msg(req, key) });
     }
     if (req.file && !contentMatches(req.file)) {
       removeFile(req.file);
-      return res.status(400).json({ error: 'الملف تالف أو ليس صورة/فيديو حقيقي' });
+      return res.status(400).json({ error: msg(req, 'badFile') });
     }
     // Don't keep files from requests that end up rejected.
     res.on('finish', () => res.statusCode >= 400 && removeFile(req.file));
@@ -214,21 +247,31 @@ app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d' }));
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
 
 // ---------- public content ----------
-function publicContent() {
+const enabledLangs = () => {
+  const l = str(db.data.settings.languages, 20).split(',').filter((x) => LANGS.includes(x));
+  return l.length ? l : ['ar'];
+};
+
+// lang = null returns raw content with all translations (for the dashboard).
+function publicContent(lang = null) {
   const d = db.data;
+  const tr = (list) => (lang ? list.map((x) => applyLang(x, lang)) : list);
   return {
-    settings: d.settings,
-    services: d.services,
-    portfolio: d.portfolio,
-    testimonials: d.testimonials,
-    faq: d.faq,
-    paymentMethods: d.paymentMethods.filter((p) => p.enabled !== false),
+    settings: lang ? applyLang(d.settings, lang) : d.settings,
+    services: tr(d.services),
+    portfolio: tr(d.portfolio),
+    testimonials: tr(d.testimonials),
+    faq: tr(d.faq),
+    paymentMethods: tr(d.paymentMethods.filter((p) => p.enabled !== false)),
   };
 }
 
 app.get('/api/content', (req, res) => {
+  const langs = enabledLangs();
+  const def = langs.includes(db.data.settings.defaultLang) ? db.data.settings.defaultLang : langs[0];
+  const lang = langs.includes(req.query.lang) ? req.query.lang : def;
   res.setHeader('Cache-Control', 'no-cache');
-  res.json(publicContent());
+  res.json({ lang, languages: langs, defaultLang: def, ...publicContent(lang) });
 });
 
 // ---------- bookings ----------
@@ -260,23 +303,24 @@ app.post('/api/bookings', rateLimit('booking', 8, 10 * 60 * 1000), (req, res) =>
   const paymentMethod = str(b.paymentMethod, 100);
   const notes = str(b.notes, 1000);
 
-  if (!name || !phone || !date || !time) return res.status(400).json({ error: 'يرجى إكمال الحقول المطلوبة' });
-  if (!/^[+\d\s()-]{6,30}$/.test(phone)) return res.status(400).json({ error: 'رقم الهاتف غير صحيح' });
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'التاريخ غير صحيح' });
+  if (!name || !phone || !date || !time) return res.status(400).json({ error: msg(req, 'required') });
+  if (!/^[+\d\s()-]{6,30}$/.test(phone)) return res.status(400).json({ error: msg(req, 'badPhone') });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: msg(req, 'badDate') });
 
   const day = new Date(date + 'T12:00:00');
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  if (isNaN(day) || day < today) return res.status(400).json({ error: 'لا يمكن الحجز في تاريخ سابق' });
-  if (day - today > 366 * 864e5) return res.status(400).json({ error: 'لا يمكن الحجز لأكثر من سنة مقدمًا' });
-  if (closedDays().includes(day.getDay())) return res.status(400).json({ error: 'العيادة مغلقة في هذا اليوم' });
-  if (!slotList().includes(time)) return res.status(400).json({ error: 'الوقت المختار غير متاح' });
-  if (takenSlots(date).includes(time)) return res.status(409).json({ error: 'هذا الوقت محجوز، يرجى اختيار وقت آخر' });
+  if (isNaN(day) || day < today) return res.status(400).json({ error: msg(req, 'pastDate') });
+  if (day - today > 366 * 864e5) return res.status(400).json({ error: msg(req, 'farDate') });
+  if (closedDays().includes(day.getDay())) return res.status(400).json({ error: msg(req, 'closedDay') });
+  if (!slotList().includes(time)) return res.status(400).json({ error: msg(req, 'badTime') });
+  if (takenSlots(date).includes(time)) return res.status(409).json({ error: msg(req, 'taken') });
 
   const booking = {
     id: newId(),
     code: 'G-' + Math.floor(1000 + Math.random() * 9000),
     name, phone, service, date, time, paymentMethod, notes,
+    lang: LANGS.includes(b.lang) ? b.lang : 'ar',
     status: 'pending',
     createdAt: new Date().toISOString(),
   };
@@ -284,17 +328,18 @@ app.post('/api/bookings', rateLimit('booking', 8, 10 * 60 * 1000), (req, res) =>
   db.save();
   io.to('staff').emit('booking:new', booking);
 
-  const s = db.data.settings;
+  const s = applyLang(db.data.settings, booking.lang);
+  const t = (k) => msg(req, k);
   const lines = [
-    `مرحبًا ${s.clinicName}، أود حجز موعد:`,
-    `رقم الحجز: ${booking.code}`,
-    `الاسم: ${name}`,
-    `الهاتف: ${phone}`,
-    service && `الخدمة: ${service}`,
-    `التاريخ: ${date}`,
-    `الوقت: ${time}`,
-    paymentMethod && `طريقة الدفع: ${paymentMethod}`,
-    notes && `ملاحظات: ${notes}`,
+    t('bookHello')(s.clinicName),
+    `${t('code')}: ${booking.code}`,
+    `${t('name')}: ${name}`,
+    `${t('phone')}: ${phone}`,
+    service && `${t('service')}: ${service}`,
+    `${t('date')}: ${date}`,
+    `${t('time')}: ${time}`,
+    paymentMethod && `${t('pay')}: ${paymentMethod}`,
+    notes && `${t('notes')}: ${notes}`,
   ].filter(Boolean);
   res.json({ booking, whatsapp: str(s.whatsapp).replace(/\D/g, ''), message: lines.join('\n') });
 });
@@ -343,12 +388,12 @@ app.post(
   rateLimit('chatreq', 5, 30 * 60 * 1000),
   handleUpload(privateImageUpload, 'receipt'),
   (req, res) => {
-    if (!db.data.settings.chatEnabled) return res.status(403).json({ error: 'الدردشة غير متاحة حاليًا' });
+    if (!db.data.settings.chatEnabled) return res.status(403).json({ error: msg(req, 'chatOff') });
     const b = req.body || {};
     const name = str(b.name, 100);
     const phone = str(b.phone, 30);
     if (!name || !/^[+\d\s()-]{6,30}$/.test(phone)) {
-      return res.status(400).json({ error: 'يرجى إدخال الاسم ورقم هاتف صحيح' });
+      return res.status(400).json({ error: msg(req, 'nameAndPhone') });
     }
     const chat = {
       id: newId(),
@@ -372,7 +417,7 @@ app.post(
       token: chat.token,
       chat: patientView(chat),
       whatsapp: str(s.whatsapp).replace(/\D/g, ''),
-      message: `مرحبًا، قمت بطلب استشارة مباشرة عبر الموقع.\nالاسم: ${name}\nالهاتف: ${phone}\nطريقة الدفع: ${chat.paymentMethod || '-'}\nيرجى تأكيد الدفع وفتح المحادثة.`,
+      message: msg(req, 'chatMsg')(name, phone, chat.paymentMethod || '-'),
     });
   }
 );
@@ -385,11 +430,11 @@ app.get('/api/chat/session', (req, res) => {
 
 app.post('/api/chat/upload', rateLimit('chatimg', 30, 10 * 60 * 1000), (req, res, next) => {
   const chat = chatByToken(req.get('x-chat-token'));
-  if (!chat || chat.status !== 'approved') return res.status(403).json({ error: 'المحادثة غير مفعلة' });
+  if (!chat || chat.status !== 'approved') return res.status(403).json({ error: msg(req, 'chatLocked') });
   req.chat = chat;
   next();
 }, handleUpload(privateImageUpload, 'image'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'لم يتم اختيار صورة' });
+  if (!req.file) return res.status(400).json({ error: msg(req, 'noImage') });
   const m = addMessage(req.chat, { from: 'patient', image: '/api/files/' + req.file.filename, text: str(req.body.text, 2000) });
   res.json({ message: m });
 });
@@ -447,13 +492,49 @@ app.post('/api/admin/login', rateLimit('login', 10, 15 * 60 * 1000), (req, res) 
   res.json({ token: tokens.issue(user), user: publicUser(user) });
 });
 
+// Forgot password: username + recovery code -> new password (and a fresh recovery code).
+app.post('/api/admin/recover', rateLimit('login', 10, 15 * 60 * 1000), (req, res) => {
+  const username = str(req.body?.username, 100).toLowerCase();
+  const code = normalizeCode(req.body?.code);
+  const password = str(req.body?.password, 200);
+  const now = Date.now();
+  const fails = (failedLogins.get(username) || []).filter((t) => now - t < 15 * 60 * 1000);
+  if (fails.length >= 20) return res.status(429).json({ error: 'محاولات كثيرة لهذا الحساب، حاول بعد 15 دقيقة' });
+  if (password.length < MIN_PASSWORD) return res.status(400).json({ error: `كلمة المرور يجب أن تكون ${MIN_PASSWORD} أحرف على الأقل` });
+  const user = db.data.users.find((u) => u.username.toLowerCase() === username);
+  const rec = user?.recovery || DUMMY;
+  const ok = verifyPassword(code, rec.salt, rec.hash) && !!user?.recovery && code.length === 16;
+  if (!ok) {
+    fails.push(now);
+    failedLogins.set(username, fails);
+    return res.status(401).json({ error: 'اسم المستخدم أو رمز الاستعادة غير صحيح' });
+  }
+  failedLogins.delete(username);
+  Object.assign(user, hashPassword(password), { defaultPassword: false });
+  const recoveryCode = newRecoveryCode(user); // each code works only once
+  db.save();
+  disconnectUser(user.id);
+  res.json({ token: tokens.issue(user), user: publicUser(user), recoveryCode });
+});
+
 app.get('/api/admin/me', requireStaff, (req, res) => res.json({ user: publicUser(req.user) }));
+
+// Create a new recovery code (needs the current password). The old code stops working.
+app.post('/api/admin/recovery-code', requireStaff, (req, res) => {
+  if (!verifyPassword(str(req.body?.password, 200), req.user.salt, req.user.hash)) {
+    return res.status(400).json({ error: 'كلمة المرور غير صحيحة' });
+  }
+  const recoveryCode = newRecoveryCode(req.user);
+  db.save();
+  res.json({ recoveryCode, user: publicUser(req.user) });
+});
 
 app.get('/api/admin/data', requireStaff, (req, res) => {
   const d = db.data;
   res.json({
     user: publicUser(req.user),
     ...publicContent(),
+    languages: LANGS,
     paymentMethods: d.paymentMethods,
     bookings: d.bookings,
     chats: d.chats.map(chatSummary),
@@ -470,9 +551,10 @@ app.put('/api/admin/password', requireStaff, (req, res) => {
   if (np.length < MIN_PASSWORD) return res.status(400).json({ error: `كلمة المرور يجب أن تكون ${MIN_PASSWORD} أحرف على الأقل` });
   if (np === str(current, 200) || np === 'admin123') return res.status(400).json({ error: 'اختر كلمة مرور جديدة مختلفة' });
   Object.assign(req.user, hashPassword(np), { defaultPassword: false });
+  const recoveryCode = newRecoveryCode(req.user); // new password -> new recovery code
   db.save();
   disconnectUser(req.user.id); // old sessions on other devices stop receiving live data
-  res.json({ token: tokens.issue(req.user), user: publicUser(req.user) });
+  res.json({ token: tokens.issue(req.user), user: publicUser(req.user), recoveryCode });
 });
 
 // ---------- admin: settings ----------
@@ -484,7 +566,13 @@ app.put('/api/admin/settings', requireStaff, requireAdmin, (req, res) => {
   const body = req.body || {};
   for (const key of Object.keys(s)) {
     if (!(key in body)) continue;
-    if (BOOL_SETTINGS.includes(key)) s[key] = !!body[key];
+    if (key === 'i18n') s.i18n = mergeI18n(s.i18n, body.i18n, TRANSLATABLE.settings);
+    else if (key === 'languages') {
+      const l = str(body[key], 20).split(',').filter((x, i, a) => LANGS.includes(x) && a.indexOf(x) === i);
+      if (l.length) s[key] = l.join(',');
+    } else if (key === 'defaultLang') {
+      if (LANGS.includes(body[key])) s[key] = body[key];
+    } else if (BOOL_SETTINGS.includes(key)) s[key] = !!body[key];
     else if (URL_SETTINGS.includes(key)) s[key] = safeUrl(body[key]);
     else if (key === 'mapEmbed') {
       const v = str(body[key], 2000);
@@ -494,8 +582,9 @@ app.put('/api/admin/settings', requireStaff, requireAdmin, (req, res) => {
     } else if (key === 'primaryColor') {
       s[key] = /^#[0-9a-f]{6}$/i.test(body[key]) ? body[key] : s[key];
     } else if (key === 'whatsapp') s[key] = str(body[key], 30).replace(/\D/g, '');
-    else s[key] = str(body[key], 10000);
+    else s[key] = str(body[key], key === 'privacyPolicy' ? 30000 : 10000);
   }
+  if (!s.languages.split(',').includes(s.defaultLang)) s.defaultLang = s.languages.split(',')[0];
   db.save();
   io.emit('content:changed');
   res.json({ settings: s });
@@ -511,17 +600,19 @@ const COLLECTIONS = {
 };
 
 // Skip collection routes for other paths (bookings, chats, users...) before any auth check.
-const isCollection = (req, res, next) => (COLLECTIONS[req.params.col] ? next() : next('route'));
+const isCollection = (req, res, next) =>
+  Object.prototype.hasOwnProperty.call(COLLECTIONS, req.params.col) ? next() : next('route');
 
-function cleanItem(schema, body) {
+function cleanItem(schema, body, col, existing) {
   const out = {};
-  for (const [k, fn] of Object.entries(schema)) if (k in body) out[k] = fn(body[k]);
+  for (const [k, fn] of Object.entries(schema)) if (Object.prototype.hasOwnProperty.call(body, k)) out[k] = fn(body[k]);
+  if (body.i18n) out.i18n = mergeI18n(existing?.i18n, body.i18n, TRANSLATABLE[col], 5000);
   return out;
 }
 
 app.post('/api/admin/:col', isCollection, requireStaff, requireAdmin, (req, res) => {
   const schema = COLLECTIONS[req.params.col];
-  const item = { id: newId(), ...Object.fromEntries(Object.keys(schema).map((k) => [k, ''])), ...cleanItem(schema, req.body || {}) };
+  const item = { id: newId(), ...Object.fromEntries(Object.keys(schema).map((k) => [k, ''])), ...cleanItem(schema, req.body || {}, req.params.col) };
   db.data[req.params.col].push(item);
   db.save();
   io.emit('content:changed');
@@ -544,7 +635,7 @@ app.put('/api/admin/:col/:id', isCollection, requireStaff, requireAdmin, (req, r
   const schema = COLLECTIONS[req.params.col];
   const item = db.data[req.params.col].find((x) => x.id === req.params.id);
   if (!item) return res.status(404).json({ error: 'غير موجود' });
-  Object.assign(item, cleanItem(schema, req.body || {}));
+  Object.assign(item, cleanItem(schema, req.body || {}, req.params.col, item));
   db.save();
   io.emit('content:changed');
   res.json({ item });
@@ -657,6 +748,19 @@ app.post('/api/admin/users', requireStaff, requireAdmin, (req, res) => {
   res.json({ user: publicUser(user) });
 });
 
+// The doctor sets a temporary password for an assistant who forgot theirs (must be changed at next login).
+app.put('/api/admin/users/:id/password', requireStaff, requireAdmin, (req, res) => {
+  const user = db.data.users.find((u) => u.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'غير موجود' });
+  if (user.id === req.user.id) return res.status(400).json({ error: 'غيّر كلمة مرورك من صفحة «كلمة المرور»' });
+  const password = str(req.body?.password, 200);
+  if (password.length < MIN_PASSWORD) return res.status(400).json({ error: `كلمة المرور يجب أن تكون ${MIN_PASSWORD} أحرف على الأقل` });
+  Object.assign(user, hashPassword(password), { defaultPassword: true });
+  db.save();
+  disconnectUser(user.id);
+  res.json({ user: publicUser(user) });
+});
+
 app.delete('/api/admin/users/:id', requireStaff, requireAdmin, (req, res) => {
   if (req.params.id === req.user.id) return res.status(400).json({ error: 'لا يمكنك حذف حسابك' });
   const i = db.data.users.findIndex((u) => u.id === req.params.id);
@@ -665,6 +769,51 @@ app.delete('/api/admin/users/:id', requireStaff, requireAdmin, (req, res) => {
   db.save();
   disconnectUser(req.params.id);
   res.json({ ok: true });
+});
+
+// ---------- admin: backups ----------
+const backups = createBackupService({ db, dataDir: DATA_DIR, uploadDir: UPLOAD_DIR, privateDir: PRIVATE_DIR, backupDir: BACKUP_DIR, keepDays: Number(process.env.BACKUP_KEEP_DAYS) || 14 });
+const backupSig = (name, exp) => fileSig('backup:' + name, exp);
+
+app.get('/api/admin/backups', requireStaff, requireAdmin, (req, res) => res.json({ backups: backups.list() }));
+
+app.post('/api/admin/backups', requireStaff, requireAdmin, async (req, res, next) => {
+  try {
+    const name = await backups.runDaily(true);
+    res.json({ name, backups: backups.list() });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Downloads use a one-time-ish signed link (valid 5 minutes) so the browser can download directly.
+app.post('/api/admin/backups/link', requireStaff, requireAdmin, (req, res) => {
+  const name = str(req.body?.name, 60);
+  if (name !== 'full' && !backups.fileFor(name)) return res.status(400).json({ error: 'نسخة غير صالحة' });
+  const exp = Date.now() + 5 * 60 * 1000;
+  res.json({ url: `/api/backup-download?n=${encodeURIComponent(name)}&e=${exp}&s=${backupSig(name, exp)}` });
+});
+
+app.get('/api/backup-download', (req, res) => {
+  const name = str(req.query.n, 60);
+  const exp = Number(req.query.e);
+  const sig = str(req.query.s, 64);
+  const expected = backupSig(name, exp);
+  if (!(exp > Date.now() && sig.length === expected.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected)))) {
+    return res.status(403).end();
+  }
+  res.setHeader('Cache-Control', 'no-store');
+  if (name === 'full') {
+    const file = `full-backup-${new Date().toISOString().slice(0, 10)}.tar.gz`;
+    res.setHeader('Content-Type', 'application/gzip');
+    res.setHeader('Content-Disposition', `attachment; filename="${file}"`);
+    const s = backups.stream(true);
+    s.on('error', () => res.destroy());
+    return s.pipe(res);
+  }
+  const file = backups.fileFor(name);
+  if (!file || !fs.existsSync(file)) return res.status(404).end();
+  res.download(file, name);
 });
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'not found' }));
@@ -747,7 +896,8 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 if (require.main === module) {
+  backups.start();
   server.listen(PORT, () => console.log(`Dr. Noor Ali site running on http://localhost:${PORT}  (admin: /admin)`));
 }
 
-module.exports = { app, server, db };
+module.exports = { app, server, db, backups };

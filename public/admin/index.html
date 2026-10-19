@@ -22,7 +22,21 @@
       <label class="field"><span>كلمة المرور</span><input name="password" type="password" autocomplete="current-password" dir="ltr" required /></label>
       <button class="btn btn-primary btn-block" type="submit">دخول</button>
       <p class="form-error" id="loginError"></p>
+      <p><button type="button" class="link-btn" id="forgotBtn">نسيت كلمة المرور؟</button></p>
       <a class="muted small" href="/">← العودة إلى الموقع</a>
+    </form>
+    <form class="login-card" id="recoverForm" hidden>
+      <div class="login-logo"><img src="/img/favicon.svg" alt="" width="56" height="56" /></div>
+      <h1>استعادة كلمة المرور</h1>
+      <p class="muted">أدخل رمز الاستعادة الذي حفظته عند إنشاء كلمة المرور.</p>
+      <label class="field"><span>اسم المستخدم</span><input name="username" autocomplete="username" dir="ltr" required /></label>
+      <label class="field"><span>رمز الاستعادة</span><input name="code" dir="ltr" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off" required /></label>
+      <label class="field"><span>كلمة المرور الجديدة (8 أحرف على الأقل)</span><input name="next" type="password" autocomplete="new-password" dir="ltr" minlength="8" required /></label>
+      <label class="field"><span>تأكيد كلمة المرور الجديدة</span><input name="confirm" type="password" autocomplete="new-password" dir="ltr" minlength="8" required /></label>
+      <button class="btn btn-primary btn-block" type="submit">تعيين كلمة المرور</button>
+      <p class="form-error" id="recoverError"></p>
+      <p class="muted small">لا تملك رمز استعادة؟ إذا كنت مساعدًا اطلب من الطبيبة تعيين كلمة مرور جديدة لك. وإذا كنت الطبيبة، تواصلي مع من يدير استضافة الموقع.</p>
+      <p><button type="button" class="link-btn" id="backToLogin">← العودة لتسجيل الدخول</button></p>
     </form>
     <form class="login-card" id="forceForm" hidden>
       <div class="login-logo"><img src="/img/favicon.svg" alt="" width="56" height="56" /></div>

@@ -1,4 +1,5 @@
 import { icon, esc } from './icons.js';
+import { t, lang, setLang, preferredLang, slotLabel, languagePicker } from './i18n.js';
 
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
@@ -8,11 +9,11 @@ let tooth = null;
 
 // ---------- utilities ----------
 export function toast(msg, type = '') {
-  const t = $('#toast');
-  t.textContent = msg;
-  t.className = 'toast show ' + type;
+  const el = $('#toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + type;
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => (t.className = 'toast'), 3800);
+  toast.timer = setTimeout(() => (el.className = 'toast'), 3800);
 }
 
 const lines = (s) => String(s || '').split('\n').map((l) => l.trim()).filter(Boolean);
@@ -44,17 +45,20 @@ function renderBasics(s) {
   $$('[data-bind]').forEach((el) => (el.textContent = s[el.dataset.bind] || ''));
   $('#brand').innerHTML = brandHtml(s);
   $('#footerBrand').innerHTML = brandHtml(s);
-  $('#heroBook').innerHTML = `${icon('calendar')} احجز موعدك الآن`;
-  $('#heroChat').innerHTML = `${icon('chat')} تحدث مع الطبيبة`;
+  $('#heroBook').innerHTML = `${icon('calendar')} ${t('hero_book')}`;
+  $('#heroChat').innerHTML = `${icon('chat')} ${t('hero_chat')}`;
   $('#heroChat').hidden = !s.chatEnabled;
   $('#fcIcon1').innerHTML = icon('tooth');
   $('#fcIcon2').innerHTML = icon('star');
   $('#hoursIcon').innerHTML = icon('clock');
   $('#payIcon').innerHTML = icon('wallet');
   $('#menuToggle').innerHTML = icon('menu');
-  $('#bookingSubmit').innerHTML = `${icon('whatsapp')} تأكيد الحجز عبر واتساب`;
+  $('#bookingSubmit').innerHTML = `${icon('whatsapp')} ${t('submit_booking')}`;
+  const privacyHref = `/privacy?lang=${lang()}`;
+  $('#privacyLink').href = privacyHref;
+  $('#bookingConsent').innerHTML = `${esc(t('consent'))} <a href="${privacyHref}" target="_blank" rel="noopener">${esc(t('privacy'))}</a> ${esc(t('consent_after'))}`;
   $('#fabWhatsapp').innerHTML = icon('whatsapp');
-  $('#fabWhatsapp').href = waLink(s.whatsapp, `مرحبًا ${s.clinicName}`);
+  $('#fabWhatsapp').href = waLink(s.whatsapp, `${lang() === 'de' ? 'Hallo' : lang() === 'en' ? 'Hello' : 'مرحبًا'} ${s.clinicName}`);
   $('#fabChat').innerHTML = icon('chat') + '<span class="fab-dot" hidden></span>';
   $('#fabChat').hidden = !s.chatEnabled;
 
@@ -96,18 +100,18 @@ function renderServices(list) {
         ${sv.price ? `<span class="price">${esc(sv.price)}</span>` : ''}
       </article>`
       )
-      .join('') || '<p class="empty">ستتم إضافة الخدمات قريبًا</p>';
+      .join('') || `<p class="empty">${t('empty_services')}</p>`;
 }
 
 function workMedia(w) {
   const images = lines(w.images);
   const badges = [];
-  if (w.before && w.after) badges.push(`<span class="badge">قبل / بعد</span>`);
-  if (w.video) badges.push(`<span class="badge">${icon('play')} فيديو</span>`);
+  if (w.before && w.after) badges.push(`<span class="badge">${t('before')} / ${t('after')}</span>`);
+  if (w.video) badges.push(`<span class="badge">${icon('play')} ${t('video')}</span>`);
   if (images.length) badges.push(`<span class="badge">${icon('image')} ${images.length}</span>`);
   let inner;
   if (w.before && w.after) {
-    inner = `<div class="work-split"><div><img src="${esc(w.before)}" alt="" loading="lazy"><span class="badge">قبل</span></div><div><img src="${esc(w.after)}" alt="" loading="lazy"><span class="badge">بعد</span></div></div>`;
+    inner = `<div class="work-split"><div><img src="${esc(w.before)}" alt="" loading="lazy"><span class="badge">${t('before')}</span></div><div><img src="${esc(w.after)}" alt="" loading="lazy"><span class="badge">${t('after')}</span></div></div>`;
   } else if (w.after || w.before || images[0]) {
     inner = `<img src="${esc(w.after || w.before || images[0])}" alt="${esc(w.title)}" loading="lazy">`;
   } else if (w.video && isDirectVideo(w.video)) {
@@ -123,7 +127,7 @@ function workMedia(w) {
 function renderPortfolio(list) {
   const cats = [...new Set(list.map((w) => w.category).filter(Boolean))];
   $('#portfolioFilters').innerHTML = cats.length > 1
-    ? ['الكل', ...cats].map((c, i) => `<button class="filter ${i === 0 ? 'active' : ''}" data-cat="${i === 0 ? '' : esc(c)}" role="tab">${esc(c)}</button>`).join('')
+    ? [t('all'), ...cats].map((c, i) => `<button class="filter ${i === 0 ? 'active' : ''}" data-cat="${i === 0 ? '' : esc(c)}" role="tab">${esc(c)}</button>`).join('')
     : '';
   $('#portfolioGrid').innerHTML =
     list
@@ -138,21 +142,21 @@ function renderPortfolio(list) {
         </div>
       </button>`
       )
-      .join('') || '<p class="empty">ستتم إضافة الأعمال قريبًا</p>';
+      .join('') || `<p class="empty">${t('empty_work')}</p>`;
 }
 
 function renderTestimonials(list) {
   $('#testimonials').hidden = !list.length;
   $('#testimonialsList').innerHTML = list
-    .map((t) => {
-      const r = Number(t.rating) || 5;
+    .map((tm) => {
+      const r = Number(tm.rating) || 5;
       const stars = Array.from({ length: 5 }, (_, i) => icon('star', i < r ? '' : 'off')).join('');
       return `
       <figure class="card testimonial tilt reveal">
         ${icon('quote', 'quote-icon')}
-        <div class="stars" aria-label="${r} من 5">${stars}</div>
-        <p>${esc(t.text)}</p>
-        <figcaption class="person"><span class="avatar">${t.photo ? `<img src="${esc(t.photo)}" alt="" loading="lazy">` : initials(t.name)}</span><strong>${esc(t.name)}</strong></figcaption>
+        <div class="stars" aria-label="${t('of5', r)}">${stars}</div>
+        <p>${esc(tm.text)}</p>
+        <figcaption class="person"><span class="avatar">${tm.photo ? `<img src="${esc(tm.photo)}" alt="" loading="lazy">` : initials(tm.name)}</span><strong>${esc(tm.name)}</strong></figcaption>
       </figure>`;
     })
     .join('');
@@ -167,14 +171,14 @@ function renderFaq(list) {
 
 function renderContact(s) {
   const cards = [];
-  if (s.whatsapp) cards.push(`<a class="card contact-card wa" href="${waLink(s.whatsapp)}" target="_blank" rel="noopener"><span class="ci">${icon('whatsapp')}</span><div><small>واتساب</small><strong class="ltr">+${esc(s.whatsapp)}</strong></div></a>`);
-  if (s.phone) cards.push(`<a class="card contact-card" href="tel:${esc(s.phone.replace(/[^\d+]/g, ''))}"><span class="ci">${icon('phone')}</span><div><small>اتصل بنا</small><strong class="ltr">${esc(s.phone)}</strong></div></a>`);
-  if (s.email) cards.push(`<a class="card contact-card" href="mailto:${esc(s.email)}"><span class="ci">${icon('mail')}</span><div><small>البريد الإلكتروني</small><strong>${esc(s.email)}</strong></div></a>`);
-  if (s.address) cards.push(`<div class="card contact-card"><span class="ci">${icon('pin')}</span><div><small>العنوان</small><strong>${esc(s.address)}</strong></div></div>`);
-  if (s.workingHours) cards.push(`<div class="card contact-card"><span class="ci">${icon('clock')}</span><div><small>أوقات العمل</small><strong>${lines(s.workingHours).map(esc).join('<br>')}</strong></div></div>`);
+  if (s.whatsapp) cards.push(`<a class="card contact-card wa" href="${waLink(s.whatsapp)}" target="_blank" rel="noopener"><span class="ci">${icon('whatsapp')}</span><div><small>${t('c_whatsapp')}</small><strong class="ltr">+${esc(s.whatsapp)}</strong></div></a>`);
+  if (s.phone) cards.push(`<a class="card contact-card" href="tel:${esc(s.phone.replace(/[^\d+]/g, ''))}"><span class="ci">${icon('phone')}</span><div><small>${t('c_call')}</small><strong class="ltr">${esc(s.phone)}</strong></div></a>`);
+  if (s.email) cards.push(`<a class="card contact-card" href="mailto:${esc(s.email)}"><span class="ci">${icon('mail')}</span><div><small>${t('c_email')}</small><strong>${esc(s.email)}</strong></div></a>`);
+  if (s.address) cards.push(`<div class="card contact-card"><span class="ci">${icon('pin')}</span><div><small>${t('c_address')}</small><strong>${esc(s.address)}</strong></div></div>`);
+  if (s.workingHours) cards.push(`<div class="card contact-card"><span class="ci">${icon('clock')}</span><div><small>${t('c_hours')}</small><strong>${lines(s.workingHours).map(esc).join('<br>')}</strong></div></div>`);
   $('#contactCards').innerHTML = cards.join('');
   $('#mapBox').innerHTML = s.mapEmbed
-    ? `<iframe src="${esc(s.mapEmbed)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="موقع العيادة" allowfullscreen></iframe>`
+    ? `<iframe src="${esc(s.mapEmbed)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="${esc(t('map_title'))}" allowfullscreen></iframe>`
     : `<div class="map-placeholder">${icon('pin')}<strong>${esc(s.address || '')}</strong></div>`;
 }
 
@@ -190,12 +194,11 @@ function parseSlot(label) {
   return h * 60 + min;
 }
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const DAY_NAMES = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
 function setupBookingForm() {
   const s = content.settings;
   const form = $('#bookingForm');
-  $('#serviceSelect').innerHTML = `<option value="">استشارة / فحص عام</option>` + content.services.map((sv) => `<option>${esc(sv.title)}</option>`).join('');
+  $('#serviceSelect').innerHTML = `<option value="">${t('general_consult')}</option>` + content.services.map((sv) => `<option>${esc(sv.title)}</option>`).join('');
   const pays = content.paymentMethods;
   $('#bookingPay').innerHTML = pays.map((p) => `<option>${esc(p.name)}</option>`).join('') || '<option value="">—</option>';
   $('#payList').innerHTML = pays.map((p) => `<span class="pay-chip">${esc(p.name)}</span>`).join('');
@@ -223,13 +226,13 @@ function setupBookingForm() {
     const box = $('#slots');
     selectedTime = '';
     const date = dateInput.value;
-    if (!date) return (box.innerHTML = '<p class="muted small">اختر التاريخ أولًا</p>');
+    if (!date) return (box.innerHTML = `<p class="muted small">${t('pick_date')}</p>`);
     const day = new Date(date + 'T12:00:00').getDay();
     if (closed.includes(day)) {
-      box.innerHTML = `<p class="muted small">العيادة مغلقة يوم ${DAY_NAMES[day]}، اختر يومًا آخر.</p>`;
+      box.innerHTML = `<p class="muted small">${esc(t('closed_day', t('days')[day]))}</p>`;
       return;
     }
-    box.innerHTML = '<p class="muted small">جارِ التحميل…</p>';
+    box.innerHTML = `<p class="muted small">${t('loading')}</p>`;
     let taken = [];
     try {
       taken = (await (await fetch('/api/bookings/taken?date=' + date)).json()).taken || [];
@@ -239,12 +242,12 @@ function setupBookingForm() {
     const nowMin = now.getHours() * 60 + now.getMinutes();
     const slots = lines(s.bookingSlots);
     box.innerHTML = slots
-      .map((t) => {
-        const past = isToday && (parseSlot(t) ?? 9999) <= nowMin;
-        const dis = taken.includes(t) || past;
-        return `<button type="button" class="slot" data-time="${esc(t)}" ${dis ? 'disabled' : ''}>${esc(t)}</button>`;
+      .map((slot) => {
+        const past = isToday && (parseSlot(slot) ?? 9999) <= nowMin;
+        const dis = taken.includes(slot) || past;
+        return `<button type="button" class="slot" data-time="${esc(slot)}" ${dis ? 'disabled' : ''}>${esc(slotLabel(slot))}</button>`;
       })
-      .join('') || '<p class="muted small">لا توجد أوقات متاحة</p>';
+      .join('') || `<p class="muted small">${t('no_slots')}</p>`;
   }
   dateInput.onchange = loadSlots;
   $('#slots').onclick = (e) => {
@@ -261,21 +264,22 @@ function setupBookingForm() {
     err.textContent = '';
     const data = Object.fromEntries(new FormData(form));
     data.time = selectedTime;
+    data.lang = lang();
     $$('.invalid', form).forEach((x) => x.classList.remove('invalid'));
     const missing = [];
     if (!data.name.trim()) missing.push(form.name);
     if (!/^[+\d\s()-]{6,30}$/.test(data.phone.trim())) missing.push(form.phone);
     if (!data.date) missing.push(dateInput);
     missing.forEach((m) => m.classList.add('invalid'));
-    if (missing.length) return (err.textContent = 'يرجى إكمال الحقول المطلوبة بشكل صحيح');
-    if (!data.time) return (err.textContent = 'يرجى اختيار وقت الموعد');
+    if (missing.length) return (err.textContent = t('err_fields'));
+    if (!data.time) return (err.textContent = t('err_time'));
 
     const btn = $('#bookingSubmit');
     btn.disabled = true;
     try {
       const res = await fetch('/api/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
       const out = await res.json();
-      if (!res.ok) throw new Error(out.error || 'حدث خطأ');
+      if (!res.ok) throw new Error(out.error || t('err_generic'));
       showBookingSuccess(out);
       form.reset();
       showPay();
@@ -293,14 +297,14 @@ function showBookingSuccess({ booking, whatsapp, message }) {
   const row = (k, v) => (v ? `<div><span>${k}</span><b>${esc(v)}</b></div>` : '');
   $('#bookingModalCard').innerHTML = `
     <div class="success-icon">${icon('check')}</div>
-    <h3>تم تسجيل طلب الحجز</h3>
-    <p class="muted">خطوة أخيرة: أرسل الطلب إلى العيادة عبر واتساب ليتم تأكيده.</p>
+    <h3>${esc(t('ok_title'))}</h3>
+    <p class="muted">${esc(t('ok_text'))}</p>
     <div class="summary">
-      ${row('رقم الحجز', booking.code)}${row('الخدمة', booking.service)}${row('التاريخ', booking.date)}${row('الوقت', booking.time)}${row('طريقة الدفع', booking.paymentMethod)}
+      ${row(t('s_code'), booking.code)}${row(t('s_service'), booking.service)}${row(t('s_date'), booking.date)}${row(t('s_time'), slotLabel(booking.time))}${row(t('s_pay'), booking.paymentMethod)}
     </div>
     <div class="modal-actions">
-      <a class="btn btn-whatsapp btn-lg" href="${esc(link)}" target="_blank" rel="noopener">${icon('whatsapp')} إرسال الحجز عبر واتساب</a>
-      <button class="btn btn-soft" type="button" data-close>إغلاق</button>
+      <a class="btn btn-whatsapp btn-lg" href="${esc(link)}" target="_blank" rel="noopener">${icon('whatsapp')} ${esc(t('send_wa'))}</a>
+      <button class="btn btn-soft" type="button" data-close>${esc(t('close'))}</button>
     </div>`;
   openModal($('#bookingModal'));
 }
@@ -328,18 +332,19 @@ document.addEventListener('keydown', (e) => {
 
 export function baSlider(before, after) {
   return `<div class="ba">
-    <img src="${esc(after)}" alt="بعد">
-    <img class="ba-before" src="${esc(before)}" alt="قبل">
+    <img src="${esc(after)}" alt="${esc(t('after'))}">
+    <img class="ba-before" src="${esc(before)}" alt="${esc(t('before'))}">
     <div class="ba-handle"></div>
-    <span class="badge ba-label r">قبل</span><span class="badge ba-label l">بعد</span>
-    <input type="range" min="0" max="100" value="50" aria-label="قارن قبل وبعد">
+    <span class="badge ba-label before">${esc(t('before'))}</span><span class="badge ba-label after">${esc(t('after'))}</span>
+    <input type="range" min="0" max="100" value="50" aria-label="${esc(t('compare'))}">
   </div>`;
 }
 function wireBa(root) {
   $$('.ba', root).forEach((ba) => {
     const r = $('input', ba);
-    // RTL: "before" sits on the right, revealed as the handle moves left.
-    const set = () => ba.style.setProperty('--pos', 100 - r.value + '%');
+    // The range input runs right-to-left in Arabic, left-to-right otherwise; --pos is always
+    // measured from the left edge, and "before" sits on the start side (right in Arabic).
+    const set = () => ba.style.setProperty('--pos', (document.dir === 'rtl' ? 100 - r.value : r.value) + '%');
     r.addEventListener('input', set);
     set();
   });
@@ -359,7 +364,7 @@ function mediaHtml(item, w) {
   const yt = youtubeId(item.src);
   if (yt) return `<iframe class="lb-video" src="https://www.youtube-nocookie.com/embed/${yt}?autoplay=1&rel=0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen title="${esc(w.title)}"></iframe>`;
   if (isDirectVideo(item.src)) return `<video class="lb-video" src="${esc(item.src)}" controls playsinline autoplay></video>`;
-  return `<div class="lb-body" style="background:#fff"><a class="btn btn-primary" href="${esc(item.src)}" target="_blank" rel="noopener">${icon('play')} مشاهدة الفيديو</a></div>`;
+  return `<div class="lb-body" style="background:#fff"><a class="btn btn-primary" href="${esc(item.src)}" target="_blank" rel="noopener">${icon('play')} ${esc(t('watch_video'))}</a></div>`;
 }
 
 function openWork(id) {
@@ -367,16 +372,16 @@ function openWork(id) {
   if (!w) return;
   const items = mediaItems(w);
   const thumbs = items.length > 1
-    ? `<div class="lb-thumbs">${items.map((it, i) => `<button type="button" data-i="${i}" class="${i === 0 ? 'active' : ''}" aria-label="عرض ${i + 1}">${it.type === 'video' ? `<span class="vthumb">${icon('play')}</span>` : `<img src="${esc(it.thumb || it.src)}" alt="">`}</button>`).join('')}</div>`
+    ? `<div class="lb-thumbs">${items.map((it, i) => `<button type="button" data-i="${i}" class="${i === 0 ? 'active' : ''}" aria-label="${esc(t('view_n', i + 1))}">${it.type === 'video' ? `<span class="vthumb">${icon('play')}</span>` : `<img src="${esc(it.thumb || it.src)}" alt="">`}</button>`).join('')}</div>`
     : '';
   $('#lightboxInner').innerHTML = `
-    <button class="icon-btn lb-close" data-close aria-label="إغلاق">${icon('close')}</button>
+    <button class="icon-btn lb-close" data-close aria-label="${esc(t('close'))}">${icon('close')}</button>
     ${items.length ? `<div class="lb-media"><div id="lbStage">${mediaHtml(items[0], w)}</div>${thumbs}</div>` : ''}
     <div class="lb-body">
       ${w.category ? `<span class="work-cat">${esc(w.category)}</span>` : ''}
       <h3>${esc(w.title)}</h3>
       <div class="muted">${paragraphs(w.description)}</div>
-      <a href="#booking" class="btn btn-primary" data-close>${icon('calendar')} احجز حالة مشابهة</a>
+      <a href="#booking" class="btn btn-primary" data-close>${icon('calendar')} ${esc(t('book_similar'))}</a>
     </div>`;
   wireBa($('#lightboxInner'));
   $$('.lb-thumbs button', $('#lightboxInner')).forEach((b) =>
@@ -486,6 +491,7 @@ async function setup3D(s) {
 // ---------- boot ----------
 function renderAll() {
   const s = content.settings;
+  renderLanguagePicker();
   applyTheme(s);
   renderBasics(s);
   renderServices(content.services);
@@ -498,10 +504,31 @@ function renderAll() {
   tooth?.setColor(s.primaryColor);
 }
 
-async function loadContent() {
-  const res = await fetch('/api/content', { cache: 'no-store' });
+async function loadContent(l) {
+  const q = l ? `?lang=${encodeURIComponent(l)}` : '';
+  const res = await fetch('/api/content' + q, { cache: 'no-store' });
   if (!res.ok) throw new Error('failed');
   content = await res.json();
+  setLang(content.lang);
+}
+
+let chatModule = null;
+function renderLanguagePicker() {
+  const slot = $('#langSlot');
+  slot.innerHTML = '';
+  if (content.languages.length < 2) return;
+  slot.appendChild(
+    languagePicker(content.languages, async (l) => {
+      try {
+        await loadContent(l);
+        setLang(l, true);
+        renderAll();
+        chatModule?.refresh();
+      } catch {
+        toast(t('load_error'), 'error');
+      }
+    })
+  );
 }
 
 async function boot() {
@@ -509,19 +536,18 @@ async function boot() {
   setupPortfolioEvents();
   setupTilt();
   try {
-    await loadContent();
+    await loadContent(preferredLang());
   } catch {
     $('#loader').classList.add('done');
-    toast('تعذر تحميل المحتوى، يرجى تحديث الصفحة', 'error');
+    toast(t('load_error'), 'error');
     return;
   }
   await setup3D(content.settings);
   renderAll();
   requestAnimationFrame(() => $('#loader').classList.add('done'));
 
-  const chat = await import('./chat.js');
-  chat.initChat({ getContent: () => content, toast, openModal, closeModal });
-
+  chatModule = await import('./chat.js');
+  chatModule.initChat({ getContent: () => content, toast, openModal, closeModal });
 }
 
 boot();

@@ -143,19 +143,52 @@ function notify(title, body) {
 }
 
 // ---------- auth ----------
-function showLogin() {
+function showScreen(id) {
   $('#app').hidden = true;
-  $('#forceForm').hidden = true;
-  $('#loginForm').hidden = false;
+  for (const f of ['loginForm', 'forceForm', 'recoverForm']) $('#' + f).hidden = f !== id;
   $('#login').hidden = false;
 }
+const showLogin = () => showScreen('loginForm');
+$('#forgotBtn').onclick = () => showScreen('recoverForm');
+$('#backToLogin').onclick = () => showScreen('loginForm');
+
+// Shows a freshly created recovery code once; `then` runs after the user confirms they saved it.
+function showRecoveryCode(code, then) {
+  const card = openModal(`
+    <div class="modal-head"><h2>${icon('key')} رمز استعادة كلمة المرور</h2></div>
+    <p>إذا نسيتِ كلمة المرور يومًا، يمكنكِ تعيين كلمة جديدة بهذا الرمز من رابط «نسيت كلمة المرور؟».</p>
+    <div class="code-box" id="recCode">${esc(code)}</div>
+    <p class="muted small">⚠️ لن يظهر هذا الرمز مرة أخرى. احفظيه في مكان آمن (صورة في هاتفك، أو ورقة في العيادة). كل رمز يعمل مرة واحدة فقط.</p>
+    <div class="modal-foot"><button class="btn btn-primary" id="recSaved">${icon('check')} حفظته</button><button class="btn btn-light" id="recCopy">نسخ</button></div>`, 'sm');
+  $('#recCopy', card).onclick = async () => {
+    try { await navigator.clipboard.writeText(code); toast('تم النسخ ✓', 'ok'); } catch { toast('انسخ الرمز يدويًا', 'error'); }
+  };
+  onModalClose = () => then?.();
+  $('#recSaved', card).onclick = closeModal;
+}
+
+$('#recoverForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  $('#recoverError').textContent = '';
+  if (f.next.value !== f.confirm.value) return ($('#recoverError').textContent = 'كلمتا المرور غير متطابقتين');
+  try {
+    const res = await fetch('/api/admin/recover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: f.username.value, code: f.code.value, password: f.next.value }) });
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.error);
+    state.token = out.token;
+    try { localStorage.setItem(TOKEN_KEY, out.token); } catch {}
+    f.reset();
+    toast('تم تعيين كلمة المرور الجديدة ✓', 'ok');
+    showRecoveryCode(out.recoveryCode, start);
+  } catch (ex) {
+    $('#recoverError').textContent = ex.message || 'تعذرت الاستعادة';
+  }
+};
 
 // First login with the default password: must set a new one before seeing any data.
 function showForceChange() {
-  $('#app').hidden = true;
-  $('#loginForm').hidden = true;
-  $('#forceForm').hidden = false;
-  $('#login').hidden = false;
+  showScreen('forceForm');
 }
 $('#forceForm').onsubmit = async (e) => {
   e.preventDefault();
@@ -168,7 +201,7 @@ $('#forceForm').onsubmit = async (e) => {
     try { localStorage.setItem(TOKEN_KEY, out.token); } catch {}
     f.reset();
     toast('تم تغيير كلمة المرور ✓', 'ok');
-    start();
+    showRecoveryCode(out.recoveryCode, start);
   } catch (ex) {
     $('#forceError').textContent = ex.message;
   }
@@ -212,6 +245,7 @@ const VIEWS = [
   { id: 'paymentMethods', label: 'طرق الدفع', icon: 'wallet', admin: true },
   { group: 'الحساب' },
   { id: 'users', label: 'المستخدمون', icon: 'users', admin: true },
+  { id: 'backups', label: 'النسخ الاحتياطي', icon: 'download', admin: true },
   { id: 'account', label: 'كلمة المرور', icon: 'lock' },
 ];
 
@@ -251,7 +285,7 @@ function render() {
   renderNav();
   const v = VIEWS.find((x) => x.id === state.view) || VIEWS[1];
   $('#viewTitle').textContent = v.label;
-  const fn = { dashboard: viewDashboard, bookings: viewBookings, chats: viewChats, settings: viewSettings, users: viewUsers, account: viewAccount }[state.view];
+  const fn = { dashboard: viewDashboard, bookings: viewBookings, chats: viewChats, settings: viewSettings, users: viewUsers, account: viewAccount, backups: viewBackups }[state.view];
   if (fn) fn();
   else if (COLLECTIONS[state.view]) viewCollection(state.view);
 }
@@ -259,11 +293,11 @@ function render() {
 // ---------- dashboard ----------
 function bookingCard(b) {
   const statusSel = `<select data-bstatus="${b.id}">${Object.entries(BOOKING_LABELS).map(([k, l]) => `<option value="${k}" ${b.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
-  const msg = `مرحبًا ${b.name}، تم تأكيد موعدك في ${state.data.settings.clinicName}\nرقم الحجز: ${b.code}\nالتاريخ: ${b.date}\nالوقت: ${b.time}\nبانتظارك 🌷`;
+  const msg = confirmMessage(b);
   return `
   <div class="row-card">
     <div>
-      <h3>${esc(b.name)} <span class="status st-${b.status}">${BOOKING_LABELS[b.status]}</span> <span class="code">${esc(b.code)}</span></h3>
+      <h3>${esc(b.name)} <span class="status st-${b.status}">${BOOKING_LABELS[b.status]}</span> <span class="code">${esc(b.code)}</span>${b.lang && b.lang !== 'ar' ? ` <span class="lang-badge" title="لغة المريض">${b.lang.toUpperCase()}</span>` : ''}</h3>
       <div class="meta"><span class="ltr">${icon('phone')} ${esc(b.phone)}</span>${b.service ? `<span>${icon('tooth')} ${esc(b.service)}</span>` : ''}${b.paymentMethod ? `<span>${icon('wallet')} ${esc(b.paymentMethod)}</span>` : ''}</div>
     </div>
     <div><div class="when">${icon('calendar')} ${esc(b.date)} — ${esc(b.time)}</div><div class="muted small">أُرسل ${fmtDate(b.createdAt)}</div></div>
@@ -275,6 +309,16 @@ function bookingCard(b) {
     ${b.notes ? `<div class="note">${esc(b.notes)}</div>` : ''}
   </div>`;
 }
+// Confirmation message to the patient, in the language they booked in.
+function confirmMessage(b) {
+  const st = state.data.settings;
+  const tr = (k) => (b.lang && b.lang !== 'ar' && st.i18n?.[b.lang]?.[k]) || st[k];
+  const clinic = tr('clinicName');
+  if (b.lang === 'en') return `Hello ${b.name}, your appointment at ${clinic} is confirmed.\nBooking no.: ${b.code}\nDate: ${b.date}\nTime: ${b.time}\nSee you soon 🌷`;
+  if (b.lang === 'de') return `Hallo ${b.name}, Ihr Termin in der ${clinic} ist bestätigt.\nBuchungsnr.: ${b.code}\nDatum: ${b.date}\nUhrzeit: ${b.time}\nWir freuen uns auf Sie 🌷`;
+  return `مرحبًا ${b.name}، تم تأكيد موعدك في ${clinic}\nرقم الحجز: ${b.code}\nالتاريخ: ${b.date}\nالوقت: ${b.time}\nبانتظارك 🌷`;
+}
+
 const BOOKING_LABELS = { pending: 'بانتظار التأكيد', confirmed: 'مؤكد', done: 'تم', cancelled: 'ملغي' };
 const CHAT_LABELS = { pending: 'بانتظار الدفع', approved: 'مفتوحة', rejected: 'مرفوضة', closed: 'مغلقة' };
 
@@ -309,6 +353,7 @@ function viewDashboard() {
   const pendingC = d.chats.filter((c) => c.status === 'pending');
   const openC = d.chats.filter((c) => c.status === 'approved');
   $('#view').innerHTML = `
+    ${!state.user.hasRecovery ? `<div class="alert warn">${icon('key')} <span>لم تُنشئ رمز استعادة بعد. إذا نسيت كلمة المرور لن تتمكن من الدخول.</span> <button class="btn btn-sm btn-light" data-go="account">إنشاء الآن</button></div>` : ''}
     ${state.user.defaultPassword ? `<div class="alert warn">${icon('lock')} <span>أنت تستخدم كلمة المرور الافتراضية. يرجى تغييرها لحماية لوحة التحكم.</span> <button class="btn btn-sm btn-light" data-go="account">تغيير الآن</button></div>` : ''}
     <div class="kpis">
       <div class="kpi warn"><span class="ki">${icon('calendar')}</span><div><strong>${pendingB.length}</strong><span>حجوزات بانتظار التأكيد</span></div></div>
@@ -575,6 +620,13 @@ const SETTINGS_GROUPS = [
     ['chatEnabled', 'تفعيل الدردشة المباشرة مع الطبيبة', 'bool', 'full'], ['chatPrice', 'رسوم الاستشارة'],
     ['chatIntro', 'نص تعريفي للدردشة', 'textarea', 'full'],
   ] },
+  { title: 'اللغات', fields: [
+    ['languages', 'لغات الموقع', 'langs', 'full', 'تظهر للزائر قائمة لاختيار اللغة. أوقف أي لغة لم تترجم محتواها بعد.'],
+    ['defaultLang', 'اللغة الافتراضية عند فتح الموقع', 'select', '', '', [['ar', 'العربية'], ['en', 'English'], ['de', 'Deutsch']]],
+  ] },
+  { title: 'سياسة الخصوصية', fields: [
+    ['privacyPolicy', 'نص سياسة الخصوصية', 'textarea', 'full tall', 'تظهر في صفحة /privacy. استخدم "## " لبداية عنوان و"- " للنقاط. النص المرفق نموذج عام: راجعه بما يناسب قوانين بلدك.'],
+  ] },
   { title: 'التواصل الاجتماعي', fields: [
     ['instagram', 'Instagram', 'url'], ['facebook', 'Facebook', 'url'], ['tiktok', 'TikTok', 'url'], ['snapchat', 'Snapchat', 'url'], ['youtube', 'YouTube', 'url'],
   ] },
@@ -582,12 +634,21 @@ const SETTINGS_GROUPS = [
 const DAY_NAMES = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
 // Generic field renderer used by settings and collection forms.
-function fieldHtml([key, label, type = 'text', cls = '', hint = ''], value) {
+const LANG_LABELS = { ar: 'العربية', en: 'English', de: 'Deutsch' };
+
+function fieldHtml([key, label, type = 'text', cls = '', hint = '', options = []], value, ph = '') {
+  const phAttr = ph ? ` placeholder="${esc(ph)}"` : '';
   const h = hint ? `<small class="hint">${esc(hint)}</small>` : '';
   const wrap = (inner, extra = '') => `<div class="field ${cls} ${extra}" data-key="${key}" data-type="${type}"><span>${esc(label)}</span>${inner}${h}</div>`;
   switch (type) {
     case 'textarea':
-      return wrap(`<textarea name="${key}" rows="${cls === 'full' ? 4 : 5}">${esc(value)}</textarea>`);
+      return wrap(`<textarea name="${key}" dir="auto" rows="${cls.includes('tall') ? 18 : cls.includes('full') ? 4 : 5}"${phAttr}>${esc(value)}</textarea>`);
+    case 'langs': {
+      const set = String(value || '').split(',');
+      return wrap(`<div class="days">${Object.entries(LANG_LABELS).map(([l, n]) => `<label class="on-ok"><input type="checkbox" value="${l}" ${set.includes(l) ? 'checked' : ''}> ${n}</label>`).join('')}</div>`);
+    }
+    case 'select':
+      return wrap(`<select name="${key}">${options.map(([v, n]) => `<option value="${esc(v)}" ${v === value ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>`);
     case 'bool':
       return `<div class="field ${cls}" data-key="${key}" data-type="bool"><label class="switch"><input type="checkbox" name="${key}" ${value ? 'checked' : ''}> ${esc(label)}</label>${h}</div>`;
     case 'color':
@@ -610,7 +671,7 @@ function fieldHtml([key, label, type = 'text', cls = '', hint = ''], value) {
     case 'url':
       return wrap(`<input type="url" name="${key}" dir="ltr" value="${esc(value)}" placeholder="https://">`);
     default:
-      return wrap(`<input type="text" name="${key}" value="${esc(value)}" ${key === 'whatsapp' ? 'dir="ltr" inputmode="tel"' : ''}${cls === 'datalist' ? ` list="dl-${key}"` : ''}>`);
+      return wrap(`<input type="text" name="${key}" value="${esc(value)}"${phAttr} ${key === 'whatsapp' ? 'dir="ltr" inputmode="tel"' : 'dir="auto"'}${cls === 'datalist' ? ` list="dl-${key}"` : ''}>`);
   }
 }
 
@@ -621,7 +682,7 @@ function wireFields(root, values) {
     const key = f.dataset.key;
     const type = f.dataset.type;
     if (type === 'bool') getters[key] = () => $('input', f).checked;
-    else if (type === 'days') getters[key] = () => $$('input:checked', f).map((i) => i.value).join(',');
+    else if (type === 'days' || type === 'langs') getters[key] = () => $$('input:checked', f).map((i) => i.value).join(',');
     else if (type === 'icon') {
       let cur = values[key] || 'tooth';
       $$('[data-icon]', f).forEach((b) => (b.onclick = () => { cur = b.dataset.icon; $$('[data-icon]', f).forEach((x) => x.classList.toggle('on', x === b)); }));
@@ -674,6 +735,63 @@ function wireFields(root, values) {
   return () => Object.fromEntries(Object.entries(getters).map(([k, g]) => [k, g()]));
 }
 
+// Which fields can be translated (must match lib/i18n.js on the server).
+const TRANSLATABLE = {
+  settings: ['clinicName', 'doctorName', 'doctorTitle', 'heroBadge', 'heroTitle', 'heroSubtitle', 'stats', 'aboutTitle', 'aboutText', 'aboutHighlights',
+    'servicesTitle', 'servicesSubtitle', 'portfolioTitle', 'portfolioSubtitle', 'testimonialsTitle', 'testimonialsSubtitle', 'faqTitle', 'bookingTitle',
+    'bookingSubtitle', 'contactTitle', 'address', 'workingHours', 'bookingNote', 'chatPrice', 'chatIntro', 'footerText', 'seoDescription', 'privacyPolicy'],
+  services: ['title', 'description', 'price'],
+  portfolio: ['title', 'category', 'description'],
+  testimonials: ['name', 'text'],
+  faq: ['question', 'answer'],
+  paymentMethods: ['name', 'instructions'],
+};
+
+const langTabsHtml = () => `<div class="lang-tabs">${Object.entries(LANG_LABELS).map(([l, n]) => `<button type="button" class="tab ${l === 'ar' ? 'active' : ''}" data-elang="${l}">${n}</button>`).join('')}</div>`;
+
+// Form with language tabs. Arabic shows every field; English/German show only the texts to
+// translate (with the Arabic text as a hint). Switching tabs keeps unsaved edits.
+// Returns a function producing the save body: { ...arabicFields, i18n: { en: {...}, de: {...} } }.
+function multiLangEditor(wrap, fields, record, trKeys) {
+  const tabs = $('.lang-tabs', wrap);
+  const grid = $('.form-grid', wrap);
+  const drafts = {};
+  let cur = 'ar';
+  let get;
+  const draw = () => {
+    if (cur === 'ar') {
+      const rec = { ...record, ...(drafts.ar || {}) };
+      grid.innerHTML = fields.map((f) => fieldHtml(f, rec[f[0]])).join('');
+      get = wireFields(grid, rec);
+    } else {
+      const vals = { ...(record.i18n?.[cur] || {}), ...(drafts[cur] || {}) };
+      const base = { ...record, ...(drafts.ar || {}) };
+      const tf = fields.filter((f) => trKeys.includes(f[0]));
+      grid.innerHTML =
+        `<p class="lang-note small">${icon('globe')} ترجمة إلى ${LANG_LABELS[cur]}. النص الرمادي داخل الحقل هو الأصل العربي. الحقول الفارغة تظهر للزائر بالعربية، والصور والإعدادات الأخرى مشتركة بين كل اللغات.</p>` +
+        tf.map((f) => fieldHtml([f[0], f[1], f[2] === 'datalist' ? 'text' : f[2], f[3], ''], vals[f[0]] ?? '', base[f[0]] || '')).join('');
+      get = wireFields(grid, vals);
+    }
+    $$('[data-elang]', tabs).forEach((b) => b.classList.toggle('active', b.dataset.elang === cur));
+  };
+  tabs.onclick = (e) => {
+    const b = e.target.closest('[data-elang]');
+    if (!b || b.dataset.elang === cur) return;
+    drafts[cur] = get();
+    cur = b.dataset.elang;
+    draw();
+  };
+  draw();
+  return () => {
+    drafts[cur] = get();
+    const body = { ...(drafts.ar || {}) };
+    const i18n = {};
+    for (const l of ['en', 'de']) if (drafts[l]) i18n[l] = drafts[l];
+    if (Object.keys(i18n).length) body.i18n = i18n;
+    return body;
+  };
+}
+
 function viewSettings() {
   const s = state.data.settings;
   const g = SETTINGS_GROUPS[state.settingsGroup];
@@ -681,12 +799,14 @@ function viewSettings() {
     <div class="settings-nav">${SETTINGS_GROUPS.map((x, i) => `<button class="tab ${i === state.settingsGroup ? 'active' : ''}" data-sg="${i}">${esc(x.title)}</button>`).join('')}</div>
     <form class="panel" id="settingsForm">
       <div class="panel-head"><h2>${esc(g.title)}</h2></div>
+      ${g.fields.some((f) => TRANSLATABLE.settings.includes(f[0])) ? langTabsHtml() : ''}
       <div class="form-grid">${g.fields.map((f) => fieldHtml(f, s[f[0]])).join('')}</div>
       <div class="save-bar"><button class="btn btn-primary" type="submit">${icon('check')} حفظ التغييرات</button><a class="btn btn-light" href="/" target="_blank" rel="noopener">${icon('eye')} معاينة الموقع</a></div>
     </form>`;
   $$('[data-sg]').forEach((b) => (b.onclick = () => { state.settingsGroup = Number(b.dataset.sg); render(); }));
-  const get = wireFields($('#settingsForm'), s);
-  $('#settingsForm').onsubmit = async (e) => {
+  const form = $('#settingsForm');
+  const get = $('.lang-tabs', form) ? multiLangEditor(form, g.fields, s, TRANSLATABLE.settings) : wireFields(form, s);
+  form.onsubmit = async (e) => {
     e.preventDefault();
     try {
       const { settings } = await api('/admin/settings', { method: 'PUT', body: get() });
@@ -776,16 +896,19 @@ function viewCollection(col) {
 function editItem(col, id) {
   const cfg = COLLECTIONS[col];
   const item = id ? state.data[col].find((x) => x.id === id) : { enabled: true, rating: 5, icon: 'tooth' };
-  const cats = col === 'portfolio' ? [...new Set(state.data.portfolio.map((x) => x.category).filter(Boolean))] : [];
+  const cats = col === 'portfolio'
+    ? [...new Set(state.data.portfolio.flatMap((x) => [x.category, x.i18n?.en?.category, x.i18n?.de?.category]).filter(Boolean))]
+    : [];
   const fields = cfg.fields.map((f) => (f[2] === 'datalist' ? [f[0], f[1], 'text', 'datalist', f[4]] : f));
   const card = openModal(`
     <form id="itemForm">
       <div class="modal-head"><h2>${id ? 'تعديل' : 'إضافة'} ${cfg.single}</h2><button type="button" class="icon-btn" data-close>${icon('close')}</button></div>
-      <div class="form-grid">${fields.map((f) => fieldHtml(f, item[f[0]])).join('')}</div>
+      ${langTabsHtml()}
+      <div class="form-grid"></div>
       ${cats.length ? `<datalist id="dl-category">${cats.map((c) => `<option value="${esc(c)}">`).join('')}</datalist>` : ''}
       <div class="modal-foot"><button class="btn btn-primary" type="submit">${icon('check')} حفظ</button><button class="btn btn-light" type="button" data-close>إلغاء</button></div>
     </form>`);
-  const get = wireFields(card, item);
+  const get = multiLangEditor($('#itemForm', card), fields, item, TRANSLATABLE[col]);
   $('#itemForm', card).onsubmit = async (e) => {
     e.preventDefault();
     const body = get();
@@ -809,7 +932,8 @@ function viewUsers() {
     <div class="grid-2">
       <div class="panel">
         <div class="panel-head"><h2>حسابات لوحة التحكم</h2></div>
-        ${users.map((u) => `<div class="user-row"><span class="av">${esc(u.name.charAt(0))}</span><div><b>${esc(u.name)}</b><div class="muted small ltr">${esc(u.username)}</div></div><span class="status ${u.role === 'admin' ? 'st-approved' : 'st-done'}">${u.role === 'admin' ? 'الطبيبة (كامل الصلاحيات)' : 'مساعد'}</span>${u.id !== state.user.id ? `<button class="icon-btn danger" data-udel="${u.id}">${icon('trash')}</button>` : ''}</div>`).join('')}
+        ${users.map((u) => `<div class="user-row"><span class="av">${esc(u.name.charAt(0))}</span><div><b>${esc(u.name)}</b><div class="muted small ltr">${esc(u.username)}</div></div><span class="status ${u.role === 'admin' ? 'st-approved' : 'st-done'}">${u.role === 'admin' ? 'الطبيبة (كامل الصلاحيات)' : 'مساعد'}</span>${u.id !== state.user.id ? `<button class="icon-btn" data-ureset="${u.id}" title="تعيين كلمة مرور جديدة">${icon('key')}</button><button class="icon-btn danger" data-udel="${u.id}" title="حذف">${icon('trash')}</button>` : ''}</div>`).join('')}
+        <p class="muted small">${icon('key')} إذا نسي أحد المساعدين كلمة المرور، اضغط على أيقونة المفتاح بجانبه وعيّن له كلمة مؤقتة. سيُطلب منه تغييرها عند الدخول.</p>
       </div>
       <form class="panel" id="userForm">
         <div class="panel-head"><h2>إضافة مستخدم</h2></div>
@@ -831,6 +955,17 @@ function viewUsers() {
       render();
     } catch (ex) { toast(ex.message, 'error'); }
   };
+  $$('[data-ureset]').forEach((b) =>
+    (b.onclick = async () => {
+      const u = state.data.users.find((x) => x.id === b.dataset.ureset);
+      const pass = await promptBox(`كلمة مرور مؤقتة لـ ${u.name}`, 'كلمة المرور المؤقتة (8 أحرف على الأقل) — أرسلها له، وسيُطلب منه تغييرها', '');
+      if (pass === null) return;
+      try {
+        await api(`/admin/users/${u.id}/password`, { method: 'PUT', body: { password: pass.trim() } });
+        toast('تم تعيين كلمة المرور المؤقتة ✓', 'ok');
+      } catch (ex) { toast(ex.message, 'error'); }
+    })
+  );
   $$('[data-udel]').forEach((b) =>
     (b.onclick = async () => {
       if (!(await confirmBox('حذف هذا المستخدم؟', 'حذف'))) return;
@@ -850,7 +985,21 @@ function viewAccount() {
       <label class="field"><span>كلمة المرور الحالية</span><input name="current" type="password" dir="ltr" required autocomplete="current-password"></label>
       <label class="field"><span>كلمة المرور الجديدة</span><input name="next" type="password" dir="ltr" required minlength="8" autocomplete="new-password"></label>
       <button class="btn btn-primary" type="submit">حفظ</button>
-    </form>`;
+    </form>
+    <div class="panel" style="max-width:480px">
+      <div class="panel-head"><h2>${icon('key')} رمز استعادة كلمة المرور</h2></div>
+      <p>${state.user.hasRecovery ? '✅ لديك رمز استعادة. إذا فقدته أنشئ رمزًا جديدًا (القديم سيتوقف).' : '⚠️ لا يوجد رمز استعادة. أنشئه الآن حتى تستطيع الدخول إذا نسيت كلمة المرور.'}</p>
+      <button class="btn btn-soft" id="newRecovery" type="button">${icon('key')} إنشاء رمز استعادة جديد</button>
+    </div>`;
+  $('#newRecovery').onclick = async () => {
+    const pass = await promptBox('تأكيد الهوية', 'أدخل كلمة المرور الحالية', '');
+    if (pass === null) return;
+    try {
+      const out = await api('/admin/recovery-code', { method: 'POST', body: { password: pass } });
+      state.user = out.user;
+      showRecoveryCode(out.recoveryCode, render);
+    } catch (ex) { toast(ex.message, 'error'); }
+  };
   $('#passForm').onsubmit = async (e) => {
     e.preventDefault();
     try {
@@ -863,7 +1012,58 @@ function viewAccount() {
       socket?.close();
       socket = null;
       connectSocket();
+      showRecoveryCode(out.recoveryCode, render);
     } catch (ex) { toast(ex.message, 'error'); }
+  };
+}
+
+// ---------- backups ----------
+const fmtSize = (b) => (b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
+
+async function downloadBackup(name) {
+  try {
+    const { url } = await api('/admin/backups/link', { method: 'POST', body: { name } });
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function viewBackups() {
+  $('#view').innerHTML = '<div class="panel empty">جارِ التحميل…</div>';
+  let list = [];
+  try { list = (await api('/admin/backups')).backups; } catch (e) { toast(e.message, 'error'); }
+  if (state.view !== 'backups') return;
+  $('#view').innerHTML = `
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-head"><h2>${icon('shield')} النسخ التلقائية اليومية</h2><button class="btn btn-sm btn-soft" id="backupNow">${icon('plus')} إنشاء نسخة الآن</button></div>
+        <p class="muted small">يحفظ الموقع تلقائيًا كل يوم نسخة من: الحجوزات، المحادثات، كل النصوص والإعدادات، الحسابات، وإيصالات الدفع. يحتفظ بآخر 14 يومًا ويحذف الأقدم.</p>
+        ${list.length ? list.map((b) => `<div class="backup-row"><div><b>${esc(b.date)}</b><div class="muted small"><span class="ltr">${fmtSize(b.size)}</span></div></div><button class="btn btn-sm btn-light" data-dl="${esc(b.name)}">${icon('download')} تنزيل</button></div>`).join('') : '<p class="empty">لا توجد نسخ بعد</p>'}
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>${icon('download')} نسخة كاملة</h2></div>
+        <p>تشمل كل ما سبق <b>بالإضافة إلى كل الصور والفيديوهات</b> المرفوعة. قد يكون حجمها كبيرًا.</p>
+        <button class="btn btn-primary" id="fullBackup">${icon('download')} تنزيل نسخة كاملة</button>
+        <div class="alert warn" style="margin-top:1.2rem">${icon('shield')} <span>النسخ اليومية محفوظة على نفس السيرفر. للأمان، نزّل نسخة كاملة مرة في الأسبوع واحفظها خارجه (Google Drive أو جهازك).</span></div>
+        <p class="muted small">الملفات بصيغة <span class="ltr">.tar.gz</span> وتُفتح ببرنامج 7-Zip أو WinRAR. لاسترجاع نسخة: فك الضغط وضع مجلدي <span class="ltr">data</span> و<span class="ltr">uploads</span> مكان الموجودين في مجلد الموقع، ثم أعد تشغيله.</p>
+      </div>
+    </div>`;
+  $$('[data-dl]').forEach((b) => (b.onclick = () => downloadBackup(b.dataset.dl)));
+  $('#fullBackup').onclick = () => downloadBackup('full');
+  $('#backupNow').onclick = async (e) => {
+    e.target.disabled = true;
+    try {
+      await api('/admin/backups', { method: 'POST' });
+      toast('تم إنشاء النسخة ✓', 'ok');
+      viewBackups();
+    } catch (ex) {
+      toast(ex.message, 'error');
+      e.target.disabled = false;
+    }
   };
 }
 

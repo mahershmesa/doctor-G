@@ -279,3 +279,15 @@ input[type='checkbox'] { width: auto; }
   .modal-card { border-radius: 18px 18px 0 0; max-height: 92dvh; }
   .toolbar input { max-width: none; }
 }
+
+/* recovery, languages, backups */
+.link-btn { background: none; border: 0; color: var(--primary); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; padding: 0; }
+.code-box { direction: ltr; font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; font-size: clamp(1.1rem, 4vw, 1.5rem); letter-spacing: 0.08em; text-align: center; padding: 1rem; border-radius: 12px; background: var(--primary-soft); color: var(--primary-ink); border: 2px dashed var(--primary); margin: 1rem 0; user-select: all; word-break: break-all; }
+.lang-tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; padding: 0.6rem; background: var(--bg); border-radius: 12px; }
+.lang-tabs::before { content: 'لغة المحتوى:'; font-size: 0.85rem; font-weight: 600; color: var(--muted); margin-inline-end: 0.3rem; }
+.lang-note { grid-column: 1 / -1; background: #f3f8ff; border: 1px solid #dbe7fb; border-radius: 10px; padding: 0.6rem 0.9rem; color: #46607e; }
+.backup-row { display: flex; align-items: center; gap: 0.8rem; padding: 0.7rem 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.backup-row:last-child { border: 0; }
+.backup-row div { flex: 1; min-width: 160px; }
+.lang-badge { font-size: 0.7rem; font-weight: 700; padding: 0.1em 0.5em; border-radius: 6px; background: #e8f0ff; color: #3b6fd8; }
+.days label.on-ok:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-ink); }
